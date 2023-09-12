@@ -1,4 +1,5 @@
-use crate::{Solver, NUM_PIECES};
+use crate::{Piece, Solver, NUM_PIECES};
+use num_traits::FromPrimitive;
 use std::array;
 
 pub struct SimpleSolver {
@@ -150,25 +151,24 @@ impl Solver for SimpleSolver {
         );
         solutions
     }
-    fn show_solution(&self, solution: &[u64]) -> Vec<String> {
+    fn represent_solution(&self, solution: &[u64]) -> Option<Vec<Vec<Option<Piece>>>> {
         let mut ret = Vec::with_capacity(self.rows);
         for y in 0..self.rows {
-            let mut row = String::new();
+            let mut row = Vec::with_capacity(self.cols);
             for x in 0..self.cols {
                 let z = 1 << (x + y * self.cols);
                 if let Some(p) = solution.iter().find(|&p| p & z != 0) {
                     let i = self.table[p.trailing_zeros() as usize]
                         .iter()
                         .enumerate()
-                        .find_map(|(i, v)| if v.contains(p) { Some(i) } else { None })
-                        .unwrap();
-                    row.push((b'O' + i as u8) as char);
+                        .find_map(|(i, v)| if v.contains(p) { Some(i) } else { None })?;
+                    row.push(Some(Piece::from_usize(i))?);
                 } else {
-                    row.push(' ');
+                    row.push(None);
                 }
             }
             ret.push(row);
         }
-        ret
+        Some(ret)
     }
 }

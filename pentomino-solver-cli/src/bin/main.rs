@@ -11,11 +11,21 @@ fn main() {
         let now = Instant::now();
         let solutions = solver.solve(start);
         let elapsed = now.elapsed();
+
         for solution in &solutions {
-            for line in solver.show_solution(solution) {
-                println!("{line}");
+            if let Some(result) = solver.represent_solution(solution) {
+                for row in result {
+                    let mut line = String::new();
+                    for col in row {
+                        line += &(match col {
+                            Some(p) => p.to_string(),
+                            None => String::from(" "),
+                        });
+                    }
+                    println!("{line}");
+                }
+                println!();
             }
-            println!();
         }
         println!("Found {} solutions in {elapsed:?}", solutions.len());
     }
