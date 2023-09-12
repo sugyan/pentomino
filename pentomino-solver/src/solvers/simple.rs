@@ -1,15 +1,13 @@
+use crate::{Solver, NUM_PIECES};
 use std::array;
-use std::time::Instant;
 
-struct Solver {
+pub struct SimpleSolver {
     rows: usize,
     cols: usize,
-    table: [[Vec<u64>; Self::NUM_PIECES]; 64],
+    table: [[Vec<u64>; NUM_PIECES]; 64],
 }
 
-impl Solver {
-    const NUM_PIECES: usize = 12;
-
+impl Solver for SimpleSolver {
     fn new(rows: usize, cols: usize) -> Self {
         assert!(rows * cols <= 64);
 
@@ -145,14 +143,15 @@ impl Solver {
         let mut solutions = Vec::new();
         backtrack(
             start,
-            (1 << Self::NUM_PIECES) - 1,
+            (1 << NUM_PIECES) - 1,
             &self.table,
-            &mut Vec::with_capacity(Self::NUM_PIECES),
+            &mut Vec::with_capacity(NUM_PIECES),
             &mut solutions,
         );
         solutions
     }
-    fn show_solution(&self, solution: &[u64]) {
+    fn show_solution(&self, solution: &[u64]) -> Vec<String> {
+        let mut ret = Vec::with_capacity(self.rows);
         for y in 0..self.rows {
             let mut row = String::new();
             for x in 0..self.cols {
@@ -168,24 +167,8 @@ impl Solver {
                     row.push(' ');
                 }
             }
-            println!("{row}");
+            ret.push(row);
         }
-        println!();
-    }
-}
-
-fn main() {
-    let solver = Solver::new(8, 8);
-    let start = [27, 28, 35, 36].iter().map(|&p| 1 << p).sum::<u64>();
-    // let solver = Solver::new(6, 10);
-    // let start = 0;
-    {
-        let now = Instant::now();
-        let solutions = solver.solve(start);
-        let elapsed = now.elapsed();
-        for solution in &solutions {
-            solver.show_solution(solution);
-        }
-        println!("Found {} solutions in {elapsed:?}", solutions.len());
+        ret
     }
 }
