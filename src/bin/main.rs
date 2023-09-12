@@ -1,4 +1,5 @@
 use std::array;
+use std::time::Instant;
 
 struct Solver {
     rows: usize,
@@ -8,7 +9,6 @@ struct Solver {
 
 impl Solver {
     const NUM_PIECES: usize = 12;
-    const ALL_USED: u32 = (1 << Self::NUM_PIECES) - 1;
 
     fn new(rows: usize, cols: usize) -> Self {
         assert!(rows * cols <= 64);
@@ -116,54 +116,61 @@ impl Solver {
         }
         Self { rows, cols, table }
     }
-
-    fn solve(&self, start: u64) {
-        self.backtrack(start, 0, &mut Vec::with_capacity(Self::NUM_PIECES));
-    }
-    fn backtrack(&self, current: u64, used: u32, path: &mut Vec<(usize, u64)>) -> bool {
-        if used == Self::ALL_USED {
-            return self.found(path);
-        }
-        let target = current.trailing_ones() as usize;
-        for (i, candidate) in self.table[target].iter().enumerate() {
-            if used & (1 << i) == 0 {
-                for &c in candidate.iter() {
-                    if current & c == 0 {
-                        path.push((i, c));
-                        if self.backtrack(current | c, used | (1 << i), path) {
-                            return true;
+    fn solve(&self, start: u64) -> Vec<Vec<u64>> {
+        fn backtrack(
+            current: u64,
+            remain: u32,
+            table: &[[Vec<u64>; 12]; 64],
+            path: &mut Vec<u64>,
+            solutions: &mut Vec<Vec<u64>>,
+        ) {
+            if remain == 0 {
+                solutions.push(path.clone());
+                return;
+            }
+            let target = current.trailing_ones() as usize;
+            for (i, candidate) in table[target].iter().enumerate() {
+                if remain & (1 << i) != 0 {
+                    for &c in candidate.iter() {
+                        if current & c == 0 {
+                            path.push(c);
+                            backtrack(current | c, remain & !(1 << i), table, path, solutions);
+                            path.pop();
                         }
-                        path.pop();
                     }
                 }
             }
         }
-        false
+
+        let mut solutions = Vec::new();
+        backtrack(
+            start,
+            (1 << Self::NUM_PIECES) - 1,
+            &self.table,
+            &mut Vec::with_capacity(Self::NUM_PIECES),
+            &mut solutions,
+        );
+        solutions
     }
-    fn found(&self, path: &[(usize, u64)]) -> bool {
+    fn show_solution(&self, solution: &[u64]) {
         for y in 0..self.rows {
+            let mut row = String::new();
             for x in 0..self.cols {
-                let v = 1 << (x + y * self.cols);
-                if let Some(i) =
-                    path.iter().enumerate().find_map(
-                        |(i, &(_, p))| {
-                            if p & v != 0 {
-                                Some(i as u8)
-                            } else {
-                                None
-                            }
-                        },
-                    )
-                {
-                    print!("\x1b[{}m  \x1b[0m", 41 + (i % 7));
+                let z = 1 << (x + y * self.cols);
+                if let Some(p) = solution.iter().find(|&p| p & z != 0) {
+                    let i = self.table[p.trailing_zeros() as usize]
+                        .iter()
+                        .enumerate()
+                        .find_map(|(i, v)| if v.contains(p) { Some(i) } else { None })
+                        .unwrap();
+                    row.push((b'O' + i as u8) as char);
                 } else {
-                    print!("  ");
+                    row.push(' ');
                 }
             }
-            println!();
+            println!("{row}");
         }
         println!();
-        false
     }
 }
 
@@ -172,5 +179,13 @@ fn main() {
     let start = [27, 28, 35, 36].iter().map(|&p| 1 << p).sum::<u64>();
     // let solver = Solver::new(6, 10);
     // let start = 0;
-    solver.solve(start);
+    {
+        let now = Instant::now();
+        let solutions = solver.solve(start);
+        let elapsed = now.elapsed();
+        for solution in &solutions {
+            solver.show_solution(solution);
+        }
+        println!("Found {} solutions in {elapsed:?}", solutions.len());
+    }
 }
