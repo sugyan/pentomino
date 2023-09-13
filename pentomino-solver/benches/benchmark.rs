@@ -1,7 +1,6 @@
 #![feature(test)]
 extern crate test;
-use pentomino_solver::solvers::SimpleSolver;
-use pentomino_solver::Solver;
+use pentomino_solver::solvers::{SimpleSolver, Solver};
 
 #[bench]
 fn bench_8x8_2x2(b: &mut test::Bencher) {

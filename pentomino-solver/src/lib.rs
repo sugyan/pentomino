@@ -1,8 +1,7 @@
 pub mod solvers;
 
-use std::fmt::Write;
-
 use num_derive::FromPrimitive;
+use std::fmt::Write;
 
 pub const NUM_PIECES: usize = 12;
 
@@ -39,10 +38,4 @@ impl std::fmt::Display for Piece {
             Self::Z => 'Z',
         })
     }
-}
-
-pub trait Solver {
-    fn new(rows: usize, cols: usize) -> Self;
-    fn solve(&self, start: u64) -> Vec<Vec<u64>>;
-    fn represent_solution(&self, solution: &[u64]) -> Option<Vec<Vec<Option<Piece>>>>;
 }

@@ -1,4 +1,5 @@
-use crate::{Piece, Solver, NUM_PIECES};
+use super::Solver;
+use crate::{Piece, NUM_PIECES};
 use num_traits::FromPrimitive;
 use std::array;
 
