@@ -1,17 +1,21 @@
 use clap::{Parser, ValueEnum};
+use colored::*;
 use pentomino_solver::solvers::{SimpleSolver, Solver};
+use pentomino_solver::Piece;
 use std::time::Instant;
+use supports_color::Stream;
 
 /// Pentomino solver
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
 struct Args {
-    /// Show verbose output
+    /// Color mode
     #[arg(short, long)]
-    verbose: bool,
-    /// Show all solutions
+    color: bool,
+    /// Quiet mode
     #[arg(short, long)]
-    show: bool,
+    quiet: bool,
+    /// Board type
     #[arg(short, long, value_enum, default_value_t = Board::Rect6x10)]
     board: Board,
 }
@@ -23,6 +27,36 @@ enum Board {
     Rect5x12,
     Rect6x10,
     Rect8x8_2x2,
+}
+
+fn output(piece: &Option<Piece>, color: bool) -> String {
+    if color {
+        if let Some(support) = supports_color::on(Stream::Stdout) {
+            if support.has_16m {
+                return match piece {
+                    Some(Piece::O) => "  ".on_truecolor(255, 128, 128).to_string(),
+                    Some(Piece::P) => "  ".on_truecolor(255, 255, 128).to_string(),
+                    Some(Piece::Q) => "  ".on_truecolor(128, 255, 128).to_string(),
+                    Some(Piece::R) => "  ".on_truecolor(128, 255, 255).to_string(),
+                    Some(Piece::S) => "  ".on_truecolor(128, 128, 255).to_string(),
+                    Some(Piece::T) => "  ".on_truecolor(255, 128, 255).to_string(),
+                    Some(Piece::U) => "  ".on_truecolor(128, 0, 0).to_string(),
+                    Some(Piece::V) => "  ".on_truecolor(128, 128, 0).to_string(),
+                    Some(Piece::W) => "  ".on_truecolor(0, 128, 0).to_string(),
+                    Some(Piece::X) => "  ".on_truecolor(0, 128, 128).to_string(),
+                    Some(Piece::Y) => "  ".on_truecolor(0, 0, 128).to_string(),
+                    Some(Piece::Z) => "  ".on_truecolor(128, 0, 128).to_string(),
+                    None => String::from("  "),
+                };
+            } else {
+                // TODO
+            }
+        }
+    }
+    match piece {
+        Some(p) => p.to_string(),
+        None => String::from(" "),
+    }
 }
 
 fn main() {
@@ -44,26 +78,17 @@ fn main() {
         let elapsed = now.elapsed();
         (solutions, elapsed)
     };
-    if args.show {
+    if !args.quiet {
         for solution in &solutions {
-            if let Some(result) = solver.represent_solution(solution) {
-                for row in result {
-                    let mut line = String::new();
-                    for col in row {
-                        line += &(match col {
-                            Some(p) => p.to_string(),
-                            None => String::from(" "),
-                        });
-                    }
-                    println!("{line}");
+            for row in solver.represent_solution(solution) {
+                let mut line = String::new();
+                for col in &row {
+                    line += &output(col, args.color);
                 }
-                println!();
+                println!("{line}");
             }
+            println!();
         }
     }
-    if args.verbose {
-        println!("Found {} solutions in {elapsed:?}", solutions.len());
-    } else {
-        println!("Found {} solutions", solutions.len());
-    }
+    println!("Found {} solutions in {elapsed:?}", solutions.len());
 }

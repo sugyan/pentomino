@@ -155,24 +155,30 @@ impl Solver for SimpleSolver {
         );
         solutions
     }
-    fn represent_solution(&self, solution: &[Bitboard]) -> Option<Vec<Vec<Option<Piece>>>> {
+    fn represent_solution(&self, solution: &[Bitboard]) -> Vec<Vec<Option<Piece>>> {
         let mut ret = Vec::with_capacity(self.rows);
         for y in 0..self.rows {
             let mut row = Vec::with_capacity(self.cols);
             for x in 0..self.cols {
                 let z = Bitboard::from(1 << (x + y * self.cols));
                 if let Some(p) = solution.iter().find(|&p| !(*p & z).is_empty()) {
-                    let i = self.table[u64::from(*p).trailing_zeros() as usize]
+                    let a = self.table[u64::from(*p).trailing_zeros() as usize]
                         .iter()
                         .enumerate()
-                        .find_map(|(i, v)| if v.contains(p) { Some(i) } else { None })?;
-                    row.push(Some(Piece::from_usize(i))?);
+                        .find_map(|(i, v)| {
+                            if v.contains(p) {
+                                Piece::from_usize(i)
+                            } else {
+                                None
+                            }
+                        });
+                    row.push(a);
                 } else {
                     row.push(None);
                 }
             }
             ret.push(row);
         }
-        Some(ret)
+        ret
     }
 }

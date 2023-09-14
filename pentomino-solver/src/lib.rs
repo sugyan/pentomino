@@ -9,7 +9,7 @@ pub const NUM_PIECES: usize = 12;
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, FromPrimitive)]
 pub enum Piece {
-    O,
+    O = 0,
     P,
     Q,
     R,
