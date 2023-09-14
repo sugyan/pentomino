@@ -1,10 +1,10 @@
 mod simple;
 
-use crate::Piece;
+use crate::{Bitboard, Piece};
 pub use simple::SimpleSolver;
 
 pub trait Solver {
     fn new(rows: usize, cols: usize) -> Self;
-    fn solve(&self, start: u64) -> Vec<Vec<u64>>;
-    fn represent_solution(&self, solution: &[u64]) -> Option<Vec<Vec<Option<Piece>>>>;
+    fn solve(&self, initial: Bitboard) -> Vec<Vec<Bitboard>>;
+    fn represent_solution(&self, solution: &[Bitboard]) -> Option<Vec<Vec<Option<Piece>>>>;
 }

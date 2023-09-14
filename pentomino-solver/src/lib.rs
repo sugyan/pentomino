@@ -1,5 +1,7 @@
+mod bitboard;
 pub mod solvers;
 
+pub use bitboard::Bitboard;
 use num_derive::FromPrimitive;
 use std::fmt::Write;
 

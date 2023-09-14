@@ -18,6 +18,9 @@ struct Args {
 
 #[derive(Clone, Copy, Debug, ValueEnum)]
 enum Board {
+    Rect3x20,
+    Rect4x15,
+    Rect5x12,
     Rect6x10,
     Rect8x8_2x2,
 }
@@ -25,16 +28,19 @@ enum Board {
 fn main() {
     let args = Args::parse();
 
-    let (solver, start) = match args.board {
-        Board::Rect6x10 => (SimpleSolver::new(6, 10), 0),
+    let (solver, initial) = match args.board {
+        Board::Rect3x20 => (SimpleSolver::new(3, 20), 0.into()),
+        Board::Rect4x15 => (SimpleSolver::new(4, 15), 0.into()),
+        Board::Rect5x12 => (SimpleSolver::new(5, 12), 0.into()),
+        Board::Rect6x10 => (SimpleSolver::new(6, 10), 0.into()),
         Board::Rect8x8_2x2 => (
             SimpleSolver::new(8, 8),
-            [27, 28, 35, 36].iter().map(|&p| 1 << p).sum(),
+            [27, 28, 35, 36].iter().map(|&p| 1 << p).sum::<u64>().into(),
         ),
     };
     let (solutions, elapsed) = {
         let now = Instant::now();
-        let solutions = solver.solve(start);
+        let solutions = solver.solve(initial);
         let elapsed = now.elapsed();
         (solutions, elapsed)
     };

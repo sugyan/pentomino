@@ -1,12 +1,12 @@
 use super::Solver;
-use crate::{Piece, NUM_PIECES};
+use crate::{Bitboard, Piece, NUM_PIECES};
 use num_traits::FromPrimitive;
 use std::array;
 
 pub struct SimpleSolver {
     rows: usize,
     cols: usize,
-    table: [[Vec<u64>; NUM_PIECES]; 64],
+    table: [[Vec<Bitboard>; NUM_PIECES]; 64],
 }
 
 impl Solver for SimpleSolver {
@@ -103,36 +103,39 @@ impl Solver for SimpleSolver {
         let mut table = array::from_fn(|_| array::from_fn(|_| Vec::new()));
         for (n, shape) in shapes.iter().enumerate() {
             for s in shape {
+                if s.iter().any(|p| p.0 + p.1 * cols >= rows * cols) {
+                    continue;
+                }
                 let v = s.iter().map(|p| (1 << (p.0 + p.1 * cols))).sum::<u64>();
                 let w = s.iter().map(|(x, _)| x).max().unwrap();
                 let h = s.iter().map(|(_, y)| y).max().unwrap();
-                for i in 0..cols - w {
-                    for j in 0..rows - h {
+                for i in 0..cols.max(*w) - w {
+                    for j in 0..rows.max(*h) - h {
                         let offset = i + j * cols;
-                        table[s[0].0 + offset][n].push(v << offset);
+                        table[s[0].0 + offset][n].push((v << offset).into());
                     }
                 }
             }
         }
         Self { rows, cols, table }
     }
-    fn solve(&self, start: u64) -> Vec<Vec<u64>> {
+    fn solve(&self, initial: Bitboard) -> Vec<Vec<Bitboard>> {
         fn backtrack(
-            current: u64,
+            current: Bitboard,
             remain: u32,
-            table: &[[Vec<u64>; 12]; 64],
-            path: &mut Vec<u64>,
-            solutions: &mut Vec<Vec<u64>>,
+            table: &[[Vec<Bitboard>; 12]; 64],
+            path: &mut Vec<Bitboard>,
+            solutions: &mut Vec<Vec<Bitboard>>,
         ) {
             if remain == 0 {
                 solutions.push(path.clone());
                 return;
             }
-            let target = current.trailing_ones() as usize;
+            let target = u64::from(current).trailing_ones() as usize;
             for (i, candidate) in table[target].iter().enumerate() {
                 if remain & (1 << i) != 0 {
                     for &c in candidate.iter() {
-                        if current & c == 0 {
+                        if (current & c).is_empty() {
                             path.push(c);
                             backtrack(current | c, remain & !(1 << i), table, path, solutions);
                             path.pop();
@@ -144,7 +147,7 @@ impl Solver for SimpleSolver {
 
         let mut solutions = Vec::new();
         backtrack(
-            start,
+            initial,
             (1 << NUM_PIECES) - 1,
             &self.table,
             &mut Vec::with_capacity(NUM_PIECES),
@@ -152,14 +155,14 @@ impl Solver for SimpleSolver {
         );
         solutions
     }
-    fn represent_solution(&self, solution: &[u64]) -> Option<Vec<Vec<Option<Piece>>>> {
+    fn represent_solution(&self, solution: &[Bitboard]) -> Option<Vec<Vec<Option<Piece>>>> {
         let mut ret = Vec::with_capacity(self.rows);
         for y in 0..self.rows {
             let mut row = Vec::with_capacity(self.cols);
             for x in 0..self.cols {
-                let z = 1 << (x + y * self.cols);
-                if let Some(p) = solution.iter().find(|&p| p & z != 0) {
-                    let i = self.table[p.trailing_zeros() as usize]
+                let z = Bitboard::from(1 << (x + y * self.cols));
+                if let Some(p) = solution.iter().find(|&p| !(*p & z).is_empty()) {
+                    let i = self.table[u64::from(*p).trailing_zeros() as usize]
                         .iter()
                         .enumerate()
                         .find_map(|(i, v)| if v.contains(p) { Some(i) } else { None })?;
