@@ -15,6 +15,9 @@ struct Args {
     /// Quiet mode
     #[arg(short, long)]
     quiet: bool,
+    /// Limit number of solutions
+    #[arg(short, long)]
+    limit: Option<usize>,
     /// Board type
     #[arg(short, long, value_enum, default_value_t = Board::Rect6x10)]
     board: Board,
@@ -74,7 +77,7 @@ fn main() {
     };
     let (solutions, elapsed) = {
         let now = Instant::now();
-        let solutions = solver.solve(initial);
+        let solutions = solver.solve(initial, args.limit);
         let elapsed = now.elapsed();
         (solutions, elapsed)
     };

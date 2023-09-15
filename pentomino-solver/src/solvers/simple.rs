@@ -10,6 +10,38 @@ pub struct SimpleSolver {
     table: [[Vec<Bitboard>; NUM_PIECES]; 64],
 }
 
+impl SimpleSolver {
+    fn backtrack(
+        &self,
+        current: Bitboard,
+        remain: u32,
+        limit: Option<usize>,
+        pieces: &mut [Bitboard; NUM_PIECES],
+        solutions: &mut Vec<[Bitboard; NUM_PIECES]>,
+    ) -> bool {
+        if remain == 0 {
+            solutions.push(*pieces);
+            return limit.map_or(false, |l| solutions.len() >= l);
+        }
+        let target = u64::from(current).trailing_ones() as usize;
+        for (i, candidate) in self.table[target].iter().enumerate() {
+            if remain & (1 << i) != 0 {
+                for &b in candidate.iter() {
+                    if (current & b).is_empty() {
+                        pieces[i] = b;
+                        if self.backtrack(current | b, remain & !(1 << i), limit, pieces, solutions)
+                        {
+                            return true;
+                        }
+                        pieces[i] = Bitboard::from(0);
+                    }
+                }
+            }
+        }
+        false
+    }
+}
+
 impl Solver for SimpleSolver {
     fn new(rows: usize, cols: usize) -> Self {
         assert!(rows * cols <= 64);
@@ -34,65 +66,28 @@ impl Solver for SimpleSolver {
         }
         Self { rows, cols, table }
     }
-    fn solve(&self, initial: Bitboard) -> Vec<Vec<Bitboard>> {
-        fn backtrack(
-            current: Bitboard,
-            remain: u32,
-            table: &[[Vec<Bitboard>; 12]; 64],
-            path: &mut Vec<Bitboard>,
-            solutions: &mut Vec<Vec<Bitboard>>,
-        ) {
-            if remain == 0 {
-                solutions.push(path.clone());
-                return;
-            }
-            let target = u64::from(current).trailing_ones() as usize;
-            for (i, candidate) in table[target].iter().enumerate() {
-                if remain & (1 << i) != 0 {
-                    for &c in candidate.iter() {
-                        if (current & c).is_empty() {
-                            path.push(c);
-                            backtrack(current | c, remain & !(1 << i), table, path, solutions);
-                            path.pop();
-                        }
-                    }
-                }
-            }
-        }
-
+    fn solve(&self, initial: Bitboard, limit: Option<usize>) -> Vec<[Bitboard; NUM_PIECES]> {
         let mut solutions = Vec::new();
-        backtrack(
+        self.backtrack(
             initial,
             (1 << NUM_PIECES) - 1,
-            &self.table,
-            &mut Vec::with_capacity(NUM_PIECES),
+            limit,
+            &mut [Bitboard::from(0); NUM_PIECES],
             &mut solutions,
         );
         solutions
     }
     fn represent_solution(&self, solution: &[Bitboard]) -> Vec<Vec<Option<Piece>>> {
-        let mut ret = Vec::with_capacity(self.rows);
-        for y in 0..self.rows {
-            let mut row = Vec::with_capacity(self.cols);
-            for x in 0..self.cols {
-                let z = Bitboard::from(1 << (x + y * self.cols));
-                if let Some(p) = solution.iter().find(|&p| !(*p & z).is_empty()) {
-                    let a = self.table[u64::from(*p).trailing_zeros() as usize]
-                        .iter()
-                        .enumerate()
-                        .find_map(|(i, v)| {
-                            if v.contains(p) {
-                                Piece::from_usize(i)
-                            } else {
-                                None
-                            }
-                        });
-                    row.push(a);
-                } else {
-                    row.push(None);
+        let mut ret = vec![vec![None; self.cols]; self.rows];
+        for (i, b) in solution.iter().enumerate() {
+            let p = Piece::from_usize(i);
+            for (y, row) in ret.iter_mut().enumerate() {
+                for (x, col) in row.iter_mut().enumerate() {
+                    if !(*b & Bitboard::from(1 << (x + y * self.cols))).is_empty() {
+                        *col = p;
+                    }
                 }
             }
-            ret.push(row);
         }
         ret
     }
