@@ -15,6 +15,9 @@ struct Args {
     /// Quiet mode
     #[arg(short, long)]
     quiet: bool,
+    /// Unique mode (Discard solutions that are rotations or reflections of others)
+    #[arg(short, long)]
+    unique: bool,
     /// Limit number of solutions
     #[arg(short, long)]
     limit: Option<usize>,
@@ -65,19 +68,20 @@ fn output(piece: &Option<Piece>, color: bool) -> String {
 fn main() {
     let args = Args::parse();
 
-    let (solver, initial) = match args.board {
-        Board::Rect3x20 => (SimpleSolver::new(3, 20), 0.into()),
-        Board::Rect4x15 => (SimpleSolver::new(4, 15), 0.into()),
-        Board::Rect5x12 => (SimpleSolver::new(5, 12), 0.into()),
-        Board::Rect6x10 => (SimpleSolver::new(6, 10), 0.into()),
+    let ((rows, cols), initial) = match args.board {
+        Board::Rect3x20 => ((3, 20), 0.into()),
+        Board::Rect4x15 => ((4, 15), 0.into()),
+        Board::Rect5x12 => ((5, 12), 0.into()),
+        Board::Rect6x10 => ((6, 10), 0.into()),
         Board::Rect8x8_2x2 => (
-            SimpleSolver::new(8, 8),
+            (8, 8),
             [27, 28, 35, 36].iter().map(|&p| 1 << p).sum::<u64>().into(),
         ),
     };
+    let solver = SimpleSolver::new(rows, cols);
     let (solutions, elapsed) = {
         let now = Instant::now();
-        let solutions = solver.solve(initial, args.limit);
+        let solutions = solver.solve(initial, args.unique, args.limit);
         let elapsed = now.elapsed();
         (solutions, elapsed)
     };

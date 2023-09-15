@@ -3,7 +3,7 @@ use std::fmt::Write;
 
 pub const NUM_PIECES: usize = 12;
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq, FromPrimitive)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, FromPrimitive)]
 pub enum Piece {
     O = 0,
     P,
