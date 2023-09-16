@@ -1,6 +1,6 @@
 use clap::{Parser, ValueEnum};
 use colored::*;
-use pentomino_solver::solvers::{SimpleSolver, Solver};
+use pentomino_solver::solvers::{DefaultSolver, SimpleSolver, Solver as PentominoSolver};
 use pentomino_solver::Piece;
 use std::time::Instant;
 use supports_color::Stream;
@@ -18,12 +18,12 @@ struct Args {
     /// Unique mode (Discard solutions that are rotations or reflections of others)
     #[arg(short, long)]
     unique: bool,
-    /// Limit number of solutions
-    #[arg(short, long)]
-    limit: Option<usize>,
     /// Board type
     #[arg(short, long, value_enum, default_value_t = Board::Rect6x10)]
     board: Board,
+    /// Solver type
+    #[arg(short, long, value_enum, default_value_t = Solver::Default)]
+    solver: Solver,
 }
 
 #[derive(Clone, Copy, Debug, ValueEnum)]
@@ -33,6 +33,21 @@ enum Board {
     Rect5x12,
     Rect6x10,
     Rect8x8_2x2,
+}
+
+#[derive(Clone, Copy, Debug, ValueEnum)]
+enum Solver {
+    Simple,
+    Default,
+}
+
+impl Solver {
+    fn create_solver(&self, rows: usize, cols: usize) -> Box<dyn PentominoSolver> {
+        match self {
+            Solver::Simple => Box::new(SimpleSolver::new(rows, cols)),
+            Solver::Default => Box::new(DefaultSolver::new(rows, cols)),
+        }
+    }
 }
 
 fn output(piece: &Option<Piece>, color: bool) -> String {
@@ -78,10 +93,10 @@ fn main() {
             [27, 28, 35, 36].iter().map(|&p| 1 << p).sum::<u64>().into(),
         ),
     };
-    let solver = SimpleSolver::new(rows, cols);
+    let solver = args.solver.create_solver(rows, cols);
     let (solutions, elapsed) = {
         let now = Instant::now();
-        let solutions = solver.solve(initial, args.unique, args.limit);
+        let solutions = solver.solve(initial, args.unique);
         let elapsed = now.elapsed();
         (solutions, elapsed)
     };
