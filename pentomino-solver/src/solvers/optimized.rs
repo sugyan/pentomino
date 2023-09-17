@@ -76,15 +76,22 @@ impl SolutionState {
     }
 }
 
-pub struct DefaultSolver {
+pub struct OptimizedSolver {
     rows: usize,
     cols: usize,
     table: [[Vec<Bitboard>; NUM_PIECES]; 64],
+    transposed: bool,
 }
 
-impl DefaultSolver {
-    pub fn new(rows: usize, cols: usize) -> Self {
+impl OptimizedSolver {
+    pub fn new(mut rows: usize, mut cols: usize) -> Self {
         assert!(rows * cols <= 64);
+        let transposed = if rows < cols {
+            std::mem::swap(&mut rows, &mut cols);
+            true
+        } else {
+            false
+        };
         let shapes = calculate_shapes();
         let mut table = array::from_fn(|_| array::from_fn(|_| Vec::new()));
         for (n, shape) in shapes.iter().enumerate() {
@@ -104,7 +111,12 @@ impl DefaultSolver {
                 }
             }
         }
-        Self { rows, cols, table }
+        Self {
+            rows,
+            cols,
+            table,
+            transposed,
+        }
     }
     fn backtrack(&self, current: Bitboard, remain: u32, state: &mut SolutionState) {
         if remain == 0 {
@@ -125,20 +137,28 @@ impl DefaultSolver {
     }
 }
 
-impl Solver for DefaultSolver {
+impl Solver for OptimizedSolver {
     fn solve(&self, initial: Bitboard, unique: bool) -> Vec<[Bitboard; NUM_PIECES]> {
         let mut state = SolutionState::new(unique);
         self.backtrack(initial, (1 << NUM_PIECES) - 1, &mut state);
         state.solutions
     }
     fn represent_solution(&self, solution: &[Bitboard; NUM_PIECES]) -> Vec<Vec<Option<Piece>>> {
-        let mut ret = vec![vec![None; self.cols]; self.rows];
+        let mut ret = if self.transposed {
+            vec![vec![None; self.rows]; self.cols]
+        } else {
+            vec![vec![None; self.cols]; self.rows]
+        };
         for (i, b) in solution.iter().enumerate() {
             let p = Piece::from_usize(i);
-            for (y, row) in ret.iter_mut().enumerate() {
-                for (x, col) in row.iter_mut().enumerate() {
+            for y in 0..self.rows {
+                for x in 0..self.cols {
                     if !(*b & Bitboard::from(1 << (x + y * self.cols))).is_empty() {
-                        *col = p;
+                        if self.transposed {
+                            ret[x][y] = p;
+                        } else {
+                            ret[y][x] = p;
+                        }
                     }
                 }
             }

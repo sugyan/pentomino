@@ -1,8 +1,10 @@
 mod default;
+mod optimized;
 mod simple;
 
 use crate::{Bitboard, Piece, NUM_PIECES};
 pub use default::DefaultSolver;
+pub use optimized::OptimizedSolver;
 pub use simple::SimpleSolver;
 
 pub trait Solver {

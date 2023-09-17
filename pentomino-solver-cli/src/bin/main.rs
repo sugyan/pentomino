@@ -1,7 +1,8 @@
 use clap::{Parser, ValueEnum};
 use colored::*;
-use pentomino_solver::solvers::{DefaultSolver, SimpleSolver, Solver as PentominoSolver};
+use pentomino_solver::solvers::{DefaultSolver, OptimizedSolver, SimpleSolver};
 use pentomino_solver::Piece;
+use pentomino_solver::Solver as PentominoSolver;
 use std::time::Instant;
 use supports_color::Stream;
 
@@ -39,6 +40,7 @@ enum Board {
 enum Solver {
     Simple,
     Default,
+    Optimized,
 }
 
 impl Solver {
@@ -46,6 +48,7 @@ impl Solver {
         match self {
             Solver::Simple => Box::new(SimpleSolver::new(rows, cols)),
             Solver::Default => Box::new(DefaultSolver::new(rows, cols)),
+            Solver::Optimized => Box::new(OptimizedSolver::new(rows, cols)),
         }
     }
 }
