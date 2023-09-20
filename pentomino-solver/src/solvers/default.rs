@@ -96,9 +96,9 @@ impl DefaultSolver {
                 let (w, h) = s
                     .iter()
                     .fold((0, 0), |(xmax, ymax), &(x, y)| (xmax.max(x), ymax.max(y)));
-                for i in 0..cols - w {
-                    for j in 0..rows - h {
-                        let offset = i + j * cols;
+                for y in 0..rows - h {
+                    for x in 0..cols - w {
+                        let offset = x + y * cols;
                         table[s[0].0 + offset][n].push((v << offset).into());
                     }
                 }
