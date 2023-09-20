@@ -107,7 +107,7 @@ impl SolutionState {
 pub struct OptimizedSolver {
     rows: usize,
     cols: usize,
-    table: [[Vec<Bitboard>; NUM_PIECES]; 64],
+    table: [Vec<Vec<(usize, Bitboard)>>; 64],
     transposed: bool,
     xs: Vec<Bitboard>,
 }
@@ -122,7 +122,7 @@ impl OptimizedSolver {
             false
         };
         let shapes = calculate_shapes();
-        let mut table = array::from_fn(|_| array::from_fn(|_| Vec::new()));
+        let mut table = array::from_fn(|_| vec![Vec::new(); 1 << NUM_PIECES]);
         let mut xs = Vec::new();
         for (n, shape) in shapes.iter().enumerate() {
             for s in shape {
@@ -136,7 +136,11 @@ impl OptimizedSolver {
                 for y in 0..rows - h {
                     for x in 0..cols - w {
                         let offset = x + y * cols;
-                        table[s[0].0 + offset][n].push((v << offset).into());
+                        for i in 0..(1 << NUM_PIECES) {
+                            if (i & (1 << n)) != 0 {
+                                table[s[0].0 + offset][i].push((n, (v << offset).into()));
+                            }
+                        }
                         // X
                         if n == X_INDEX && x < (cols - 1) / 2 && y < (rows - 1) / 2 {
                             xs.push((v << offset).into());
@@ -153,7 +157,7 @@ impl OptimizedSolver {
             xs,
         }
     }
-    fn backtrack(&self, current: Bitboard, remain: u32, state: &mut SolutionState) {
+    fn backtrack(&self, current: Bitboard, remain: usize, state: &mut SolutionState) {
         if remain == 0 {
             return state.add_solution(
                 Board(self.represent_solution(&state.pieces)),
@@ -161,15 +165,11 @@ impl OptimizedSolver {
             );
         }
         let target = u64::from(current).trailing_ones() as usize;
-        for (i, candidates) in self.table[target].iter().enumerate() {
-            if remain & (1 << i) != 0 {
-                for &b in candidates.iter() {
-                    if (current & b).is_empty() {
-                        state.pieces[i] = b;
-                        self.backtrack(current | b, remain & !(1 << i), state);
-                        state.pieces[i] = Bitboard::default();
-                    }
-                }
+        for &(i, b) in &self.table[target][remain] {
+            if (current & b).is_empty() {
+                state.pieces[i] = b;
+                self.backtrack(current | b, remain & !(1 << i), state);
+                state.pieces[i] = Bitboard::default();
             }
         }
     }
