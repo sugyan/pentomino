@@ -1,114 +1,101 @@
 use super::Solver;
 use crate::shapes::calculate_shapes;
 use crate::{Bitboard, Piece, NUM_PIECES};
-use num_traits::{FromPrimitive, ToPrimitive};
+use num_traits::FromPrimitive;
 use std::array;
-use std::collections::HashSet;
+use std::collections::HashMap;
 
 const X_INDEX: usize = 9;
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-struct Board(Vec<Vec<Option<Piece>>>);
+#[derive(Default)]
+struct SolutionState {
+    unique: bool,
+    rows: usize,
+    cols: usize,
+    pieces: [Bitboard; NUM_PIECES],
+    solutions: HashMap<[Bitboard; NUM_PIECES], bool>,
+}
 
-impl Board {
-    fn is_square(&self) -> bool {
-        let (rows, cols) = (self.0.len(), self.0[0].len());
-        rows == cols
-    }
-    fn flip_x(&self) -> Self {
-        let mut ret = self.clone();
-        for row in ret.0.iter_mut() {
-            row.reverse();
+impl SolutionState {
+    fn new(unique: bool, rows: usize, cols: usize) -> Self {
+        Self {
+            unique,
+            rows,
+            cols,
+            ..Default::default()
         }
-        ret
     }
-    fn flip_y(&self) -> Self {
-        let mut ret = self.clone();
-        ret.0.reverse();
-        ret
-    }
-    fn flip_xy(&self) -> Self {
-        let mut ret = self.clone();
-        for row in ret.0.iter_mut() {
-            row.reverse();
-        }
-        ret.0.reverse();
-        ret
-    }
-    fn transpose(&self) -> Self {
-        let mut ret = self.clone();
-        for (y, row) in ret.0.iter_mut().enumerate() {
-            for (x, col) in row.iter_mut().enumerate() {
-                *col = self.0[x][y];
-            }
-        }
-        ret
-    }
-    fn to_pieces(&self, transposed: bool) -> [Bitboard; NUM_PIECES] {
-        let (ros, cols) = (self.0.len(), self.0[0].len());
+    fn flip_x(&self, pieces: &[Bitboard; NUM_PIECES]) -> [Bitboard; NUM_PIECES] {
         let mut ret = [Bitboard::default(); NUM_PIECES];
-        for (y, row) in self.0.iter().enumerate() {
-            for (x, col) in row.iter().enumerate() {
-                if let Some(p) = col {
-                    if let Some(i) = p.to_usize() {
-                        let j = if transposed {
-                            x * ros + y
-                        } else {
-                            x + y * cols
-                        };
-                        ret[i] |= Bitboard::from(1 << j);
+        for (i, b) in ret.iter_mut().enumerate() {
+            for y in 0..self.rows {
+                for x in 0..self.cols {
+                    let j = x + y * self.cols;
+                    let k = (self.cols - 1 - x) + y * self.cols;
+                    if !(pieces[i] & Bitboard::from(1 << j)).is_empty() {
+                        *b |= Bitboard::from(1 << k);
                     }
                 }
             }
         }
         ret
     }
-}
-
-#[derive(Default)]
-struct SolutionState {
-    unique: bool,
-    pieces: [Bitboard; NUM_PIECES],
-    solutions: Vec<[Bitboard; NUM_PIECES]>,
-    set: HashSet<Board>,
-}
-
-impl SolutionState {
-    fn new(unique: bool) -> Self {
-        Self {
-            unique,
-            ..Default::default()
-        }
-    }
-    fn add_solution(&mut self, board: Board, transposed: bool) {
-        let x_flipped = board.flip_x();
-        let y_flipped = board.flip_y();
-        if self.unique {
-            self.set.insert(x_flipped);
-            self.set.insert(y_flipped);
-            if board.is_square() {
-                self.set.insert(board.transpose());
-            }
-        } else {
-            for b in [x_flipped, y_flipped, board.flip_xy()] {
-                if !self.set.contains(&b) {
-                    self.solutions.push(b.to_pieces(transposed));
-                    self.set.insert(b);
+    fn flip_y(&self, pieces: &[Bitboard; NUM_PIECES]) -> [Bitboard; NUM_PIECES] {
+        let mut ret = [Bitboard::default(); NUM_PIECES];
+        for (i, b) in ret.iter_mut().enumerate() {
+            for y in 0..self.rows {
+                for x in 0..self.cols {
+                    let j = x + y * self.cols;
+                    let k = x + (self.rows - 1 - y) * self.cols;
+                    if !(pieces[i] & Bitboard::from(1 << j)).is_empty() {
+                        *b |= Bitboard::from(1 << k);
+                    }
                 }
             }
         }
-        if !self.set.contains(&board) {
-            self.solutions.push(self.pieces);
-            self.set.insert(board);
+        ret
+    }
+    fn transpose(&self, pieces: &[Bitboard; NUM_PIECES]) -> [Bitboard; NUM_PIECES] {
+        let mut ret = [Bitboard::default(); NUM_PIECES];
+        for (i, b) in ret.iter_mut().enumerate() {
+            for y in 0..self.rows {
+                for x in 0..self.cols {
+                    let j = x + y * self.cols;
+                    let k = y + x * self.rows;
+                    if !(pieces[i] & Bitboard::from(1 << j)).is_empty() {
+                        *b |= Bitboard::from(1 << k);
+                    }
+                }
+            }
         }
+        ret
+    }
+    fn add_solution(&mut self) {
+        let x_flipped = self.flip_x(&self.pieces);
+        let y_flipped = self.flip_y(&self.pieces);
+        if self.unique {
+            self.solutions.entry(x_flipped).or_insert(false);
+            self.solutions.entry(y_flipped).or_insert(false);
+            if self.rows == self.cols {
+                self.solutions
+                    .entry(self.transpose(&self.pieces))
+                    .or_insert(false);
+            }
+        } else {
+            let xy_flipped = self.flip_x(&y_flipped);
+            for b in [x_flipped, y_flipped, xy_flipped] {
+                self.solutions.entry(b).or_insert(true);
+            }
+        }
+        self.solutions.entry(self.pieces).or_insert(true);
     }
 }
 
 pub struct OptimizedSolver {
     rows: usize,
     cols: usize,
-    table: [Vec<Vec<(usize, Bitboard)>>; 64],
     transposed: bool,
+    table: [Vec<Vec<(usize, Bitboard)>>; 64],
     xs: Vec<Bitboard>,
 }
 
@@ -152,17 +139,14 @@ impl OptimizedSolver {
         Self {
             rows,
             cols,
-            table,
             transposed,
+            table,
             xs,
         }
     }
     fn backtrack(&self, current: Bitboard, remain: usize, state: &mut SolutionState) {
         if remain == 0 {
-            return state.add_solution(
-                Board(self.represent_solution(&state.pieces)),
-                self.transposed,
-            );
+            return state.add_solution();
         }
         let target = u64::from(current).trailing_ones() as usize;
         for &(i, b) in &self.table[target][remain] {
@@ -177,7 +161,7 @@ impl OptimizedSolver {
 
 impl Solver for OptimizedSolver {
     fn solve(&self, initial: Bitboard, unique: bool) -> Vec<[Bitboard; NUM_PIECES]> {
-        let mut state = SolutionState::new(unique);
+        let mut state = SolutionState::new(unique, self.rows, self.cols);
         let remain = ((1 << NUM_PIECES) - 1) & !(1 << X_INDEX);
         for &x in self.xs.iter().skip(1) {
             if (initial & x).is_empty() {
@@ -186,7 +170,11 @@ impl Solver for OptimizedSolver {
                 state.pieces[X_INDEX] = Bitboard::default();
             }
         }
-        state.solutions
+        state
+            .solutions
+            .into_iter()
+            .filter_map(|(k, v)| if v { Some(k) } else { None })
+            .collect()
     }
     fn represent_solution(&self, solution: &[Bitboard; NUM_PIECES]) -> Vec<Vec<Option<Piece>>> {
         let mut ret = if self.transposed {
