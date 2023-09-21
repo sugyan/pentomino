@@ -7,68 +7,64 @@ use std::collections::HashMap;
 
 const X_INDEX: usize = 9;
 
+fn delta_swap(x: u64, (mask, delta): &(u64, u32)) -> u64 {
+    let t = (x ^ (x >> delta)) & mask;
+    x ^ t ^ (t << delta)
+}
+
 #[derive(Default)]
 struct SolutionState {
     unique: bool,
     rows: usize,
     cols: usize,
+    x_swaps: Vec<(u64, u32)>,
+    y_swaps: Vec<(u64, u32)>,
     pieces: [Bitboard; NUM_PIECES],
     solutions: HashMap<[Bitboard; NUM_PIECES], bool>,
 }
 
 impl SolutionState {
-    fn new(unique: bool, rows: usize, cols: usize) -> Self {
+    fn new(
+        unique: bool,
+        rows: usize,
+        cols: usize,
+        x_swaps: Vec<(u64, u32)>,
+        y_swaps: Vec<(u64, u32)>,
+    ) -> Self {
         Self {
             unique,
             rows,
             cols,
+            x_swaps,
+            y_swaps,
             ..Default::default()
         }
     }
     fn flip_x(&self, pieces: &[Bitboard; NUM_PIECES]) -> [Bitboard; NUM_PIECES] {
-        let mut ret = [Bitboard::default(); NUM_PIECES];
-        for (i, b) in ret.iter_mut().enumerate() {
-            for y in 0..self.rows {
-                for x in 0..self.cols {
-                    let j = x + y * self.cols;
-                    let k = (self.cols - 1 - x) + y * self.cols;
-                    if !(pieces[i] & Bitboard::from(1 << j)).is_empty() {
-                        *b |= Bitboard::from(1 << k);
-                    }
-                }
-            }
-        }
-        ret
+        array::from_fn(|i| {
+            self.x_swaps
+                .iter()
+                .fold(u64::from(pieces[i]), delta_swap)
+                .into()
+        })
     }
     fn flip_y(&self, pieces: &[Bitboard; NUM_PIECES]) -> [Bitboard; NUM_PIECES] {
-        let mut ret = [Bitboard::default(); NUM_PIECES];
-        for (i, b) in ret.iter_mut().enumerate() {
-            for y in 0..self.rows {
-                for x in 0..self.cols {
-                    let j = x + y * self.cols;
-                    let k = x + (self.rows - 1 - y) * self.cols;
-                    if !(pieces[i] & Bitboard::from(1 << j)).is_empty() {
-                        *b |= Bitboard::from(1 << k);
-                    }
-                }
-            }
-        }
-        ret
+        array::from_fn(|i| {
+            self.y_swaps
+                .iter()
+                .fold(u64::from(pieces[i]), delta_swap)
+                .into()
+        })
     }
     fn transpose(&self, pieces: &[Bitboard; NUM_PIECES]) -> [Bitboard; NUM_PIECES] {
-        let mut ret = [Bitboard::default(); NUM_PIECES];
-        for (i, b) in ret.iter_mut().enumerate() {
-            for y in 0..self.rows {
-                for x in 0..self.cols {
-                    let j = x + y * self.cols;
-                    let k = y + x * self.rows;
-                    if !(pieces[i] & Bitboard::from(1 << j)).is_empty() {
-                        *b |= Bitboard::from(1 << k);
-                    }
-                }
-            }
-        }
-        ret
+        assert!(self.rows == 8 && self.cols == 8);
+        array::from_fn(|i| {
+            let mut u = u64::from(pieces[i]);
+            u = delta_swap(u, &(0x00AA00AA00AA00AA, 7));
+            u = delta_swap(u, &(0x0000CCCC0000CCCC, 14));
+            u = delta_swap(u, &(0x00000000F0F0F0F0, 28));
+            u.into()
+        })
     }
     fn add_solution(&mut self) {
         let x_flipped = self.flip_x(&self.pieces);
@@ -94,6 +90,8 @@ impl SolutionState {
 pub struct OptimizedSolver {
     rows: usize,
     cols: usize,
+    x_swaps: Vec<(u64, u32)>,
+    y_swaps: Vec<(u64, u32)>,
     transposed: bool,
     table: [Vec<Vec<(usize, Bitboard)>>; 64],
     xs: Vec<Bitboard>,
@@ -136,12 +134,16 @@ impl OptimizedSolver {
                 }
             }
         }
+        let x_swaps = Self::generate_swaps((0..rows).map(|i| 1 << (cols * i)).sum(), cols, 1);
+        let y_swaps = Self::generate_swaps((0..cols).map(|i| 1 << i).sum(), rows, cols);
         Self {
             rows,
             cols,
             transposed,
             table,
             xs,
+            x_swaps,
+            y_swaps,
         }
     }
     fn backtrack(&self, current: Bitboard, remain: usize, state: &mut SolutionState) {
@@ -157,11 +159,39 @@ impl OptimizedSolver {
             }
         }
     }
+    fn generate_swaps(unit: u64, len: usize, steps: usize) -> Vec<(u64, u32)> {
+        let mut ret = Vec::new();
+        let mut stack = vec![(vec![0], len)];
+        while let Some((v, len)) = stack.last() {
+            if *len < 2 {
+                break;
+            }
+            let mut mask = 0;
+            for i in v {
+                for j in 0..*len / 2 {
+                    mask |= unit << ((i + j) * steps);
+                }
+            }
+            ret.push((mask, ((*len + 1) / 2 * steps) as u32));
+            stack.push((
+                v.iter().flat_map(|&i| [i, i + (*len + 1) / 2]).collect(),
+                len / 2,
+            ));
+        }
+        ret.reverse();
+        ret
+    }
 }
 
 impl Solver for OptimizedSolver {
     fn solve(&self, initial: Bitboard, unique: bool) -> Vec<[Bitboard; NUM_PIECES]> {
-        let mut state = SolutionState::new(unique, self.rows, self.cols);
+        let mut state = SolutionState::new(
+            unique,
+            self.rows,
+            self.cols,
+            self.x_swaps.clone(),
+            self.y_swaps.clone(),
+        );
         let remain = ((1 << NUM_PIECES) - 1) & !(1 << X_INDEX);
         for &x in self.xs.iter().skip(1) {
             if (initial & x).is_empty() {
@@ -197,5 +227,60 @@ impl Solver for OptimizedSolver {
             }
         }
         ret
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn flip_x_by_delta_swap() {
+        let solver = OptimizedSolver::new(5, 12);
+        assert_eq!(solver.rows, 12);
+        assert_eq!(solver.cols, 5);
+        assert!(solver.transposed);
+
+        // ###..    ..###
+        // .#...    ...#.
+        // .#...    ...#.
+        // .....    .....
+        //
+        // ...   -> ...
+        //
+        // .....    .....
+        // .....    .....
+        // .....    .....
+        // .....    .....
+        let input = to_u64(&[0, 1, 2, 6, 11]);
+        let output = solver.x_swaps.iter().fold(input, delta_swap);
+        assert_eq!(output, to_u64(&[2, 3, 4, 8, 13]), "{output:064b}");
+    }
+
+    #[test]
+    fn flip_y_by_delta_swap() {
+        let solver = OptimizedSolver::new(5, 12);
+        assert_eq!(solver.rows, 12);
+        assert_eq!(solver.cols, 5);
+        assert!(solver.transposed);
+
+        // ###..    .....
+        // .#...    .....
+        // .#...    .....
+        // .....    .....
+        //
+        // ...   ->  ...
+        //
+        // .....    .....
+        // .....    .#...
+        // .....    .#...
+        // .....    ###..
+        let input = to_u64(&[0, 1, 2, 6, 11]);
+        let output = solver.y_swaps.iter().fold(input, delta_swap);
+        assert_eq!(output, to_u64(&[46, 51, 55, 56, 57]), "{output:064b}");
+    }
+
+    fn to_u64(v: &[u32]) -> u64 {
+        v.iter().map(|&i| 1 << i).sum()
     }
 }
