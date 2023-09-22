@@ -15,8 +15,7 @@ fn delta_swap(x: u64, (mask, delta): &(u64, u32)) -> u64 {
 #[derive(Default)]
 struct SolutionState {
     unique: bool,
-    rows: usize,
-    cols: usize,
+    is_square: bool,
     x_swaps: Vec<(u64, u32)>,
     y_swaps: Vec<(u64, u32)>,
     pieces: [Bitboard; NUM_PIECES],
@@ -26,15 +25,13 @@ struct SolutionState {
 impl SolutionState {
     fn new(
         unique: bool,
-        rows: usize,
-        cols: usize,
+        is_square: bool,
         x_swaps: Vec<(u64, u32)>,
         y_swaps: Vec<(u64, u32)>,
     ) -> Self {
         Self {
             unique,
-            rows,
-            cols,
+            is_square,
             x_swaps,
             y_swaps,
             ..Default::default()
@@ -57,7 +54,6 @@ impl SolutionState {
         })
     }
     fn transpose(&self, pieces: &[Bitboard; NUM_PIECES]) -> [Bitboard; NUM_PIECES] {
-        assert!(self.rows == 8 && self.cols == 8);
         array::from_fn(|i| {
             let mut u = u64::from(pieces[i]);
             u = delta_swap(u, &(0x00AA00AA00AA00AA, 7));
@@ -72,7 +68,7 @@ impl SolutionState {
         if self.unique {
             self.solutions.entry(x_flipped).or_insert(false);
             self.solutions.entry(y_flipped).or_insert(false);
-            if self.rows == self.cols {
+            if self.is_square {
                 self.solutions
                     .entry(self.transpose(&self.pieces))
                     .or_insert(false);
@@ -95,6 +91,7 @@ pub struct OptimizedSolver {
     transposed: bool,
     table: [Vec<Vec<(usize, Bitboard)>>; 64],
     xs: Vec<Bitboard>,
+    halls: [(Bitboard, Bitboard); 64],
 }
 
 impl OptimizedSolver {
@@ -136,6 +133,27 @@ impl OptimizedSolver {
         }
         let x_swaps = Self::generate_swaps((0..rows).map(|i| 1 << (cols * i)).sum(), cols, 1);
         let y_swaps = Self::generate_swaps((0..cols).map(|i| 1 << i).sum(), rows, cols);
+        let mut halls = [(Bitboard::default(), Bitboard::from(!0)); 64];
+        for y in 0..rows {
+            for x in 0..cols {
+                let z = x + y * cols;
+                let mut v = 0_u64;
+                for (dx, dy) in [(!0, 0), (0, !0), (1, 0), (0, 1)] {
+                    let x = x.wrapping_add(dx);
+                    let y = y.wrapping_add(dy);
+                    if (0..cols).contains(&x) && (0..rows).contains(&y) {
+                        v |= 1 << (x + y * cols);
+                    }
+                }
+                let (mask, check) = ((v | (1 << z)).into(), v.into());
+                if y > 0 && x < cols - 1 {
+                    halls[(x + 1) + (y - 1) * cols] = (mask, check);
+                    if x == 0 {
+                        halls[x + (y - 1) * cols] = (mask, check);
+                    }
+                }
+            }
+        }
         Self {
             rows,
             cols,
@@ -144,6 +162,7 @@ impl OptimizedSolver {
             xs,
             x_swaps,
             y_swaps,
+            halls,
         }
     }
     fn backtrack(&self, current: Bitboard, remain: usize, state: &mut SolutionState) {
@@ -153,8 +172,12 @@ impl OptimizedSolver {
         let target = u64::from(current).trailing_ones() as usize;
         for &(i, b) in &self.table[target][remain] {
             if (current & b).is_empty() {
+                let next = current | b;
+                if next & self.halls[target].0 == self.halls[target].1 {
+                    continue;
+                }
                 state.pieces[i] = b;
-                self.backtrack(current | b, remain & !(1 << i), state);
+                self.backtrack(next, remain & !(1 << i), state);
                 state.pieces[i] = Bitboard::default();
             }
         }
@@ -187,8 +210,7 @@ impl Solver for OptimizedSolver {
     fn solve(&self, initial: Bitboard, unique: bool) -> Vec<[Bitboard; NUM_PIECES]> {
         let mut state = SolutionState::new(
             unique,
-            self.rows,
-            self.cols,
+            self.rows == self.cols,
             self.x_swaps.clone(),
             self.y_swaps.clone(),
         );
