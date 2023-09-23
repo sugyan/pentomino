@@ -91,7 +91,7 @@ pub struct OptimizedSolver {
     transposed: bool,
     table: [Vec<Vec<(usize, Bitboard)>>; 64],
     xs: Vec<Bitboard>,
-    halls: [(Bitboard, Bitboard); 64],
+    holes: [(Bitboard, Bitboard); 64],
 }
 
 impl OptimizedSolver {
@@ -133,7 +133,7 @@ impl OptimizedSolver {
         }
         let x_swaps = Self::generate_swaps((0..rows).map(|i| 1 << (cols * i)).sum(), cols, 1);
         let y_swaps = Self::generate_swaps((0..cols).map(|i| 1 << i).sum(), rows, cols);
-        let mut halls = [(Bitboard::default(), Bitboard::from(!0)); 64];
+        let mut holes = [(Bitboard::default(), Bitboard::from(!0)); 64];
         for y in 0..rows {
             for x in 0..cols {
                 let z = x + y * cols;
@@ -147,9 +147,9 @@ impl OptimizedSolver {
                 }
                 let (mask, check) = ((v | (1 << z)).into(), v.into());
                 if y > 0 && x < cols - 1 {
-                    halls[(x + 1) + (y - 1) * cols] = (mask, check);
+                    holes[(x + 1) + (y - 1) * cols] = (mask, check);
                     if x == 0 {
-                        halls[x + (y - 1) * cols] = (mask, check);
+                        holes[x + (y - 1) * cols] = (mask, check);
                     }
                 }
             }
@@ -162,7 +162,7 @@ impl OptimizedSolver {
             xs,
             x_swaps,
             y_swaps,
-            halls,
+            holes,
         }
     }
     fn backtrack(&self, current: Bitboard, remain: usize, state: &mut SolutionState) {
@@ -173,7 +173,7 @@ impl OptimizedSolver {
         for &(i, b) in &self.table[target][remain] {
             if (current & b).is_empty() {
                 let next = current | b;
-                if next & self.halls[target].0 == self.halls[target].1 {
+                if next & self.holes[target].0 == self.holes[target].1 {
                     continue;
                 }
                 state.pieces[i] = b;
