@@ -1,4 +1,4 @@
-use super::{SolutionStore, Solver};
+use super::Solver;
 use crate::shapes::calculate_shapes;
 use crate::{Bitboard, Piece, NUM_PIECES};
 use num_traits::FromPrimitive;
@@ -42,6 +42,11 @@ impl Board {
         }
         ret
     }
+}
+
+trait SolutionStore {
+    fn add_solution(&mut self, pieces: &[Bitboard; NUM_PIECES]);
+    fn get_solutions(self) -> Vec<[Bitboard; NUM_PIECES]>;
 }
 
 #[derive(Default)]

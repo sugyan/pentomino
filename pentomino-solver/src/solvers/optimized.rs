@@ -1,4 +1,4 @@
-use super::{SolutionStore, Solver};
+use super::Solver;
 use crate::shapes::calculate_shapes;
 use crate::{Bitboard, Piece, NUM_PIECES};
 use num_traits::FromPrimitive;
@@ -13,56 +13,21 @@ fn delta_swap(x: u64, (mask, delta): &(u64, u32)) -> u64 {
     x ^ t ^ (t << delta)
 }
 
-#[derive(Default, Clone)]
-struct Transformer {
-    x_swaps: Vec<(u64, u32)>,
-    y_swaps: Vec<(u64, u32)>,
-}
-
-impl Transformer {
-    fn flip_x(&self, pieces: &[Bitboard; NUM_PIECES]) -> [Bitboard; NUM_PIECES] {
-        array::from_fn(|i| {
-            self.x_swaps
-                .iter()
-                .fold(u64::from(pieces[i]), delta_swap)
-                .into()
-        })
-    }
-    fn flip_y(&self, pieces: &[Bitboard; NUM_PIECES]) -> [Bitboard; NUM_PIECES] {
-        array::from_fn(|i| {
-            self.y_swaps
-                .iter()
-                .fold(u64::from(pieces[i]), delta_swap)
-                .into()
-        })
-    }
+trait SolutionStore {
+    fn add_solution(&mut self, pieces: &[[Bitboard; NUM_PIECES]; 4]);
+    fn get_solutions(self) -> Vec<[Bitboard; NUM_PIECES]>;
 }
 
 #[derive(Default)]
 struct AllSolutionStore {
-    transformer: Transformer,
     solutions: BTreeSet<[Bitboard; NUM_PIECES]>,
 }
 
-impl AllSolutionStore {
-    fn new(transformer: Transformer) -> Self {
-        Self {
-            transformer,
-            ..Default::default()
-        }
-    }
-}
-
 impl SolutionStore for AllSolutionStore {
-    fn add_solution(&mut self, pieces: &[Bitboard; NUM_PIECES]) {
-        let pieces = *pieces;
-        self.solutions.insert(pieces);
-        let pieces = self.transformer.flip_x(&pieces);
-        self.solutions.insert(pieces);
-        let pieces = self.transformer.flip_y(&pieces);
-        self.solutions.insert(pieces);
-        let pieces = self.transformer.flip_x(&pieces);
-        self.solutions.insert(pieces);
+    fn add_solution(&mut self, pieces: &[[Bitboard; NUM_PIECES]; 4]) {
+        for p in pieces {
+            self.solutions.insert(*p);
+        }
     }
     fn get_solutions(self) -> Vec<[Bitboard; NUM_PIECES]> {
         self.solutions.into_iter().collect()
@@ -71,17 +36,10 @@ impl SolutionStore for AllSolutionStore {
 
 #[derive(Default)]
 struct UniqueSolutionStore<const SQ: bool> {
-    transformer: Transformer,
     solutions: BTreeMap<[Bitboard; NUM_PIECES], bool>,
 }
 
 impl<const SQ: bool> UniqueSolutionStore<SQ> {
-    fn new(transformer: Transformer) -> Self {
-        Self {
-            transformer,
-            ..Default::default()
-        }
-    }
     fn transpose(pieces: &[Bitboard; NUM_PIECES]) -> [Bitboard; NUM_PIECES] {
         array::from_fn(|i| {
             let mut u = u64::from(pieces[i]);
@@ -94,17 +52,13 @@ impl<const SQ: bool> UniqueSolutionStore<SQ> {
 }
 
 impl<const SQ: bool> SolutionStore for UniqueSolutionStore<SQ> {
-    fn add_solution(&mut self, pieces: &[Bitboard; NUM_PIECES]) {
-        self.solutions.entry(*pieces).or_insert(true);
-        self.solutions
-            .entry(self.transformer.flip_x(pieces))
-            .or_insert(false);
-        self.solutions
-            .entry(self.transformer.flip_y(pieces))
-            .or_insert(false);
+    fn add_solution(&mut self, pieces: &[[Bitboard; NUM_PIECES]; 4]) {
+        self.solutions.entry(pieces[0]).or_insert(true);
+        self.solutions.entry(pieces[1]).or_insert(false);
+        self.solutions.entry(pieces[2]).or_insert(false);
         if SQ {
             self.solutions
-                .entry(Self::transpose(pieces))
+                .entry(Self::transpose(&pieces[0]))
                 .or_insert(false);
         }
     }
@@ -120,10 +74,8 @@ pub struct OptimizedSolver {
     rows: usize,
     cols: usize,
     transposed: bool,
-    table: [Vec<Vec<(usize, Bitboard)>>; 64],
-    xs: Vec<Bitboard>,
-    transformer: Transformer,
-    holes: [(Bitboard, Bitboard); 64],
+    table: Vec<Vec<(usize, [Bitboard; 4])>>,
+    xs: Vec<[Bitboard; 4]>,
 }
 
 impl OptimizedSolver {
@@ -136,8 +88,10 @@ impl OptimizedSolver {
             false
         };
         let shapes = calculate_shapes();
-        let mut table = array::from_fn(|_| vec![Vec::new(); 1 << NUM_PIECES]);
+        let mut table = vec![Vec::new(); (1 << NUM_PIECES) * 64];
         let mut xs = Vec::new();
+        let x_swaps = Self::generate_swaps((0..rows).map(|i| 1 << (cols * i)).sum(), cols, 1);
+        let y_swaps = Self::generate_swaps((0..cols).map(|i| 1 << i).sum(), rows, cols);
         for (n, shape) in shapes.iter().enumerate() {
             for s in shape {
                 if s.iter().any(|&(x, y)| x >= cols || y >= rows) {
@@ -150,40 +104,20 @@ impl OptimizedSolver {
                 for y in 0..rows - h {
                     for x in 0..cols - w {
                         let offset = x + y * cols;
+                        let u0 = v << offset;
+                        let u1 = x_swaps.iter().fold(u0, delta_swap);
+                        let u2 = y_swaps.iter().fold(u0, delta_swap);
+                        let u3 = x_swaps.iter().fold(u2, delta_swap);
+                        let bs = [u0.into(), u1.into(), u2.into(), u3.into()];
                         for i in 0..(1 << NUM_PIECES) {
-                            if (i & (1 << n)) != 0 {
-                                table[s[0].0 + offset][i].push((n, (v << offset).into()));
+                            if (i & (1 << n)) == 0 {
+                                table[((s[0].0 + offset) << NUM_PIECES) + i].push((n, bs));
                             }
                         }
                         // X
                         if n == X_INDEX && x < (cols - 1) / 2 && y < (rows - 1) / 2 {
-                            xs.push((v << offset).into());
+                            xs.push(bs);
                         }
-                    }
-                }
-            }
-        }
-        let transformer = Transformer {
-            x_swaps: Self::generate_swaps((0..rows).map(|i| 1 << (cols * i)).sum(), cols, 1),
-            y_swaps: Self::generate_swaps((0..cols).map(|i| 1 << i).sum(), rows, cols),
-        };
-        let mut holes = [(Bitboard::default(), Bitboard::from(!0)); 64];
-        for y in 0..rows {
-            for x in 0..cols {
-                let z = x + y * cols;
-                let mut v = 0_u64;
-                for (dx, dy) in [(!0, 0), (0, !0), (1, 0), (0, 1)] {
-                    let x = x.wrapping_add(dx);
-                    let y = y.wrapping_add(dy);
-                    if (0..cols).contains(&x) && (0..rows).contains(&y) {
-                        v |= 1 << (x + y * cols);
-                    }
-                }
-                let (mask, check) = ((v | (1 << z)).into(), v.into());
-                if y > 0 && x < cols - 1 {
-                    holes[(x + 1) + (y - 1) * cols] = (mask, check);
-                    if x == 0 {
-                        holes[x + (y - 1) * cols] = (mask, check);
                     }
                 }
             }
@@ -194,8 +128,6 @@ impl OptimizedSolver {
             transposed,
             table,
             xs,
-            transformer,
-            holes,
         }
     }
     fn execute<S: SolutionStore>(
@@ -203,13 +135,13 @@ impl OptimizedSolver {
         initial: Bitboard,
         mut store: S,
     ) -> Vec<[Bitboard; NUM_PIECES]> {
-        let remain = ((1 << NUM_PIECES) - 1) & !(1 << X_INDEX);
-        let mut pieces = [Bitboard::default(); NUM_PIECES];
-        for &x in self.xs.iter().skip(1) {
-            if (initial & x).is_empty() {
-                pieces[X_INDEX] = x;
-                self.backtrack(initial | x, remain, &mut pieces, &mut store);
-                pieces[X_INDEX] = Bitboard::default();
+        let mut pieces = [[Bitboard::default(); NUM_PIECES]; 4];
+        for &xs in self.xs.iter().skip(1) {
+            if (initial & xs[0]).is_empty() {
+                for j in 0..4 {
+                    pieces[j][X_INDEX] = xs[j];
+                }
+                self.backtrack(initial | xs[0], 1 << X_INDEX, &mut pieces, &mut store);
             }
         }
         store.get_solutions()
@@ -217,23 +149,20 @@ impl OptimizedSolver {
     fn backtrack<S: SolutionStore>(
         &self,
         current: Bitboard,
-        remain: usize,
-        pieces: &mut [Bitboard; NUM_PIECES],
+        used: u32,
+        pieces: &mut [[Bitboard; NUM_PIECES]; 4],
         store: &mut S,
     ) {
-        if remain == 0 {
+        if used == (1 << NUM_PIECES) - 1 {
             return store.add_solution(pieces);
         }
-        let target = u64::from(current).trailing_ones() as usize;
-        for &(i, b) in &self.table[target][remain] {
-            if (current & b).is_empty() {
-                let next = current | b;
-                if next & self.holes[target].0 == self.holes[target].1 {
-                    continue;
+        let target = ((u64::from(current).trailing_ones() << NUM_PIECES) + used) as usize;
+        for &(i, bs) in &self.table[target] {
+            if (current & bs[0]).is_empty() {
+                for j in 0..4 {
+                    pieces[j][i] = bs[j];
                 }
-                pieces[i] = b;
-                self.backtrack(next, remain & !(1 << i), pieces, store);
-                pieces[i] = Bitboard::default();
+                self.backtrack(current | bs[0], used | (1 << i), pieces, store);
             }
         }
     }
@@ -265,18 +194,12 @@ impl Solver for OptimizedSolver {
     fn solve(&self, initial: Bitboard, unique: bool) -> Vec<[Bitboard; NUM_PIECES]> {
         if unique {
             if self.rows == self.cols {
-                self.execute(
-                    initial,
-                    UniqueSolutionStore::<true>::new(self.transformer.clone()),
-                )
+                self.execute(initial, UniqueSolutionStore::<true>::default())
             } else {
-                self.execute(
-                    initial,
-                    UniqueSolutionStore::<false>::new(self.transformer.clone()),
-                )
+                self.execute(initial, UniqueSolutionStore::<false>::default())
             }
         } else {
-            self.execute(initial, AllSolutionStore::new(self.transformer.clone()))
+            self.execute(initial, AllSolutionStore::default())
         }
     }
     fn represent_solution(&self, solution: &[Bitboard; NUM_PIECES]) -> Vec<Vec<Option<Piece>>> {
@@ -300,60 +223,5 @@ impl Solver for OptimizedSolver {
             }
         }
         ret
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn flip_x_by_delta_swap() {
-        let solver = OptimizedSolver::new(5, 12);
-        assert_eq!(solver.rows, 12);
-        assert_eq!(solver.cols, 5);
-        assert!(solver.transposed);
-
-        // ###..    ..###
-        // .#...    ...#.
-        // .#...    ...#.
-        // .....    .....
-        //
-        // ...   -> ...
-        //
-        // .....    .....
-        // .....    .....
-        // .....    .....
-        // .....    .....
-        let input = to_u64(&[0, 1, 2, 6, 11]);
-        let output = solver.transformer.x_swaps.iter().fold(input, delta_swap);
-        assert_eq!(output, to_u64(&[2, 3, 4, 8, 13]), "{output:064b}");
-    }
-
-    #[test]
-    fn flip_y_by_delta_swap() {
-        let solver = OptimizedSolver::new(5, 12);
-        assert_eq!(solver.rows, 12);
-        assert_eq!(solver.cols, 5);
-        assert!(solver.transposed);
-
-        // ###..    .....
-        // .#...    .....
-        // .#...    .....
-        // .....    .....
-        //
-        // ...   ->  ...
-        //
-        // .....    .....
-        // .....    .#...
-        // .....    .#...
-        // .....    ###..
-        let input = to_u64(&[0, 1, 2, 6, 11]);
-        let output = solver.transformer.y_swaps.iter().fold(input, delta_swap);
-        assert_eq!(output, to_u64(&[46, 51, 55, 56, 57]), "{output:064b}");
-    }
-
-    fn to_u64(v: &[u32]) -> u64 {
-        v.iter().map(|&i| 1 << i).sum()
     }
 }
