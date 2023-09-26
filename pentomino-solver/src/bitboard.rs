@@ -6,6 +6,8 @@ use derive_more::{BitAnd, BitAndAssign, BitOr, BitOrAssign, From, Into};
     Copy,
     PartialEq,
     Eq,
+    PartialOrd,
+    Ord,
     Hash,
     Default,
     // From/Into, and bit manipulations by derive_more

@@ -1,4 +1,4 @@
-use super::Solver;
+use super::{SolutionStore, Solver};
 use crate::shapes::calculate_shapes;
 use crate::{Bitboard, Piece, NUM_PIECES};
 use num_traits::FromPrimitive;
@@ -45,34 +45,52 @@ impl Board {
 }
 
 #[derive(Default)]
-struct SolutionState {
-    unique: bool,
-    pieces: [Bitboard; NUM_PIECES],
+struct AllSolutionStore {
+    solutions: Vec<[Bitboard; NUM_PIECES]>,
+}
+
+impl SolutionStore for AllSolutionStore {
+    fn add_solution(&mut self, pieces: &[Bitboard; NUM_PIECES]) {
+        self.solutions.push(*pieces);
+    }
+    fn get_solutions(self) -> Vec<[Bitboard; NUM_PIECES]> {
+        self.solutions
+    }
+}
+
+type Converter<'a> = Box<dyn Fn(&[Bitboard; NUM_PIECES]) -> Board + 'a>;
+
+struct UniqueSolutionStore<'a> {
+    converter: Converter<'a>,
     solutions: Vec<[Bitboard; NUM_PIECES]>,
     set: HashSet<Board>,
 }
 
-impl SolutionState {
-    fn new(unique: bool) -> Self {
+impl<'a> UniqueSolutionStore<'a> {
+    fn new(converter: impl Fn(&[Bitboard; NUM_PIECES]) -> Board + 'a) -> Self {
         Self {
-            unique,
-            ..Default::default()
+            converter: Box::new(converter),
+            solutions: Vec::new(),
+            set: HashSet::new(),
         }
     }
-    fn add_solution(&mut self, board: Board) {
-        if self.unique {
-            if !self.set.contains(&board) {
-                self.solutions.push(self.pieces);
-            }
-            self.set.insert(board.flip_x());
-            self.set.insert(board.flip_y());
-            self.set.insert(board.flip_xy());
-            if board.is_square() {
-                self.set.insert(board.transpose());
-            }
-        } else {
-            self.solutions.push(self.pieces);
+}
+
+impl<'a> SolutionStore for UniqueSolutionStore<'a> {
+    fn add_solution(&mut self, pieces: &[Bitboard; NUM_PIECES]) {
+        let board = (self.converter)(pieces);
+        if !self.set.contains(&board) {
+            self.solutions.push(*pieces);
         }
+        self.set.insert(board.flip_x());
+        self.set.insert(board.flip_y());
+        self.set.insert(board.flip_xy());
+        if board.is_square() {
+            self.set.insert(board.transpose());
+        }
+    }
+    fn get_solutions(self) -> Vec<[Bitboard; NUM_PIECES]> {
+        self.solutions
     }
 }
 
@@ -106,18 +124,37 @@ impl DefaultSolver {
         }
         Self { rows, cols, table }
     }
-    fn backtrack(&self, current: Bitboard, remain: u32, state: &mut SolutionState) {
+    fn execute<S: SolutionStore>(
+        &self,
+        initial: Bitboard,
+        mut store: S,
+    ) -> Vec<[Bitboard; NUM_PIECES]> {
+        self.backtrack(
+            initial,
+            (1 << NUM_PIECES) - 1,
+            &mut [Bitboard::default(); NUM_PIECES],
+            &mut store,
+        );
+        store.get_solutions()
+    }
+    fn backtrack<S: SolutionStore>(
+        &self,
+        current: Bitboard,
+        remain: u32,
+        pieces: &mut [Bitboard; NUM_PIECES],
+        store: &mut S,
+    ) {
         if remain == 0 {
-            return state.add_solution(Board(self.represent_solution(&state.pieces)));
+            return store.add_solution(pieces);
         }
         let target = u64::from(current).trailing_ones() as usize;
         for (i, candidates) in self.table[target].iter().enumerate() {
             if remain & (1 << i) != 0 {
                 for &b in candidates.iter() {
                     if (current & b).is_empty() {
-                        state.pieces[i] = b;
-                        self.backtrack(current | b, remain & !(1 << i), state);
-                        state.pieces[i] = Bitboard::default();
+                        pieces[i] = b;
+                        self.backtrack(current | b, remain & !(1 << i), pieces, store);
+                        pieces[i] = Bitboard::default();
                     }
                 }
             }
@@ -127,9 +164,16 @@ impl DefaultSolver {
 
 impl Solver for DefaultSolver {
     fn solve(&self, initial: Bitboard, unique: bool) -> Vec<[Bitboard; NUM_PIECES]> {
-        let mut state = SolutionState::new(unique);
-        self.backtrack(initial, (1 << NUM_PIECES) - 1, &mut state);
-        state.solutions
+        if unique {
+            self.execute(
+                initial,
+                UniqueSolutionStore::new(|pieces: &[Bitboard; NUM_PIECES]| {
+                    Board(self.represent_solution(pieces))
+                }),
+            )
+        } else {
+            self.execute(initial, AllSolutionStore::default())
+        }
     }
     fn represent_solution(&self, solution: &[Bitboard; NUM_PIECES]) -> Vec<Vec<Option<Piece>>> {
         let mut ret = vec![vec![None; self.cols]; self.rows];
