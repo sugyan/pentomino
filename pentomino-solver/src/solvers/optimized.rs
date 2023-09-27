@@ -90,6 +90,14 @@ impl OptimizedSolver {
         let shapes = calculate_shapes();
         let mut table = vec![Vec::new(); (1 << NUM_PIECES) * 64];
         let mut xs = Vec::new();
+        let edge_x = (0..cols).map(|i| 1 << i).sum::<u64>();
+        let edge_y = (0..rows).map(|i| 1 << (i * cols)).sum::<u64>();
+        let edges = [
+            edge_x,
+            edge_y,
+            edge_x << ((rows - 1) * cols),
+            edge_y << (cols - 1),
+        ];
         let x_swaps = Self::generate_swaps((0..rows).map(|i| 1 << (cols * i)).sum(), cols, 1);
         let y_swaps = Self::generate_swaps((0..cols).map(|i| 1 << i).sum(), rows, cols);
         for (n, shape) in shapes.iter().enumerate() {
@@ -105,6 +113,12 @@ impl OptimizedSolver {
                     for x in 0..cols - w {
                         let offset = x + y * cols;
                         let u0 = v << offset;
+                        if [0, 1, 2, 3, 0].windows(2).any(|w| {
+                            let (e0, e1) = (edges[w[0]], edges[w[1]]);
+                            (e0 & u0) != 0 && (e1 & u0) != 0 && (e0 & e1) & u0 == 0
+                        }) {
+                            continue;
+                        }
                         let u1 = x_swaps.iter().fold(u0, delta_swap);
                         let u2 = y_swaps.iter().fold(u0, delta_swap);
                         let u3 = x_swaps.iter().fold(u2, delta_swap);
@@ -136,7 +150,7 @@ impl OptimizedSolver {
         mut store: S,
     ) -> Vec<[Bitboard; NUM_PIECES]> {
         let mut pieces = [[Bitboard::default(); NUM_PIECES]; 4];
-        for &xs in self.xs.iter().skip(1) {
+        for &xs in &self.xs {
             if (initial & xs[0]).is_empty() {
                 for j in 0..4 {
                     pieces[j][X_INDEX] = xs[j];
