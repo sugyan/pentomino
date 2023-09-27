@@ -70,11 +70,13 @@ impl<const SQ: bool> SolutionStore for UniqueSolutionStore<SQ> {
     }
 }
 
+type Candidate = (usize, [Bitboard; 4]);
+
 pub struct OptimizedSolver {
     rows: usize,
     cols: usize,
     transposed: bool,
-    table: Vec<Vec<(usize, [Bitboard; 4])>>,
+    table: [Vec<Vec<Candidate>>; 64],
     xs: Vec<[Bitboard; 4]>,
 }
 
@@ -88,7 +90,7 @@ impl OptimizedSolver {
             false
         };
         let shapes = calculate_shapes();
-        let mut table = vec![Vec::new(); (1 << NUM_PIECES) * 64];
+        let mut table = array::from_fn(|_| vec![Vec::with_capacity(64); 1 << NUM_PIECES]);
         let mut xs = Vec::new();
         let edge_x = (0..cols).map(|i| 1 << i).sum::<u64>();
         let edge_y = (0..rows).map(|i| 1 << (i * cols)).sum::<u64>();
@@ -125,7 +127,7 @@ impl OptimizedSolver {
                         let bs = [u0.into(), u1.into(), u2.into(), u3.into()];
                         for i in 0..(1 << NUM_PIECES) {
                             if (i & (1 << n)) == 0 {
-                                table[((s[0].0 + offset) << NUM_PIECES) + i].push((n, bs));
+                                table[s[0].0 + offset][i].push((n, bs));
                             }
                         }
                         // X
@@ -155,28 +157,34 @@ impl OptimizedSolver {
                 for j in 0..4 {
                     pieces[j][X_INDEX] = xs[j];
                 }
-                self.backtrack(initial | xs[0], 1 << X_INDEX, &mut pieces, &mut store);
+                Self::backtrack(
+                    initial | xs[0],
+                    1 << X_INDEX,
+                    &self.table,
+                    &mut pieces,
+                    &mut store,
+                );
             }
         }
         store.get_solutions()
     }
     fn backtrack<S: SolutionStore>(
-        &self,
         current: Bitboard,
-        used: u32,
+        used: usize,
+        table: &[Vec<Vec<Candidate>>; 64],
         pieces: &mut [[Bitboard; NUM_PIECES]; 4],
         store: &mut S,
     ) {
         if used == (1 << NUM_PIECES) - 1 {
             return store.add_solution(pieces);
         }
-        let target = ((u64::from(current).trailing_ones() << NUM_PIECES) + used) as usize;
-        for &(i, bs) in &self.table[target] {
+        let target = u64::from(current).trailing_ones() as usize;
+        for &(i, bs) in &table[target][used] {
             if (current & bs[0]).is_empty() {
                 for j in 0..4 {
                     pieces[j][i] = bs[j];
                 }
-                self.backtrack(current | bs[0], used | (1 << i), pieces, store);
+                Self::backtrack(current | bs[0], used | (1 << i), table, pieces, store);
             }
         }
     }
