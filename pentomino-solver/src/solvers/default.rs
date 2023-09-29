@@ -117,7 +117,7 @@ impl DefaultSolver {
                 for y in 0..rows - h {
                     for x in 0..cols - w {
                         let offset = x + y * cols;
-                        table[s[0].0 + offset][n].push((v << offset).into());
+                        table[s[0].0 + offset][n].push(v << offset);
                     }
                 }
             }
@@ -147,11 +147,11 @@ impl DefaultSolver {
         if remain == 0 {
             return store.add_solution(pieces);
         }
-        let target = u64::from(current).trailing_ones() as usize;
+        let target = current.trailing_ones() as usize;
         for (i, candidates) in self.table[target].iter().enumerate() {
             if remain & (1 << i) != 0 {
                 for &b in candidates.iter() {
-                    if (current & b).is_empty() {
+                    if current & b == 0 {
                         pieces[i] = b;
                         self.backtrack(current | b, remain & !(1 << i), pieces, store);
                         pieces[i] = Bitboard::default();
@@ -181,7 +181,7 @@ impl Solver for DefaultSolver {
             let p = Piece::from_usize(i);
             for (y, row) in ret.iter_mut().enumerate() {
                 for (x, col) in row.iter_mut().enumerate() {
-                    if !(*b & Bitboard::from(1 << (x + y * self.cols))).is_empty() {
+                    if b & (1 << (x + y * self.cols)) != 0 {
                         *col = p;
                     }
                 }

@@ -9,8 +9,8 @@ const X_INDEX: usize = 9;
 
 #[derive(Default)]
 struct Transformer {
-    x_swaps: Vec<(u64, u32)>,
-    y_swaps: Vec<(u64, u32)>,
+    x_swaps: Vec<(Bitboard, u32)>,
+    y_swaps: Vec<(Bitboard, u32)>,
 }
 
 impl Transformer {
@@ -21,22 +21,12 @@ impl Transformer {
         }
     }
     fn flip_x(&self, pieces: &[Bitboard; NUM_PIECES]) -> [Bitboard; NUM_PIECES] {
-        array::from_fn(|i| {
-            self.x_swaps
-                .iter()
-                .fold(u64::from(pieces[i]), Self::delta_swap)
-                .into()
-        })
+        array::from_fn(|i| self.x_swaps.iter().fold(pieces[i], Self::delta_swap))
     }
     fn flip_y(&self, pieces: &[Bitboard; NUM_PIECES]) -> [Bitboard; NUM_PIECES] {
-        array::from_fn(|i| {
-            self.y_swaps
-                .iter()
-                .fold(u64::from(pieces[i]), Self::delta_swap)
-                .into()
-        })
+        array::from_fn(|i| self.y_swaps.iter().fold(pieces[i], Self::delta_swap))
     }
-    fn generate_swaps(unit: u64, len: usize, steps: usize) -> Vec<(u64, u32)> {
+    fn generate_swaps(unit: Bitboard, len: usize, steps: usize) -> Vec<(Bitboard, u32)> {
         let mut ret = Vec::new();
         let mut stack = vec![(vec![0], len)];
         while let Some((v, len)) = stack.last() {
@@ -59,7 +49,7 @@ impl Transformer {
         ret
     }
     #[inline]
-    fn delta_swap(x: u64, (mask, delta): &(u64, u32)) -> u64 {
+    fn delta_swap(x: Bitboard, (mask, delta): &(Bitboard, u32)) -> Bitboard {
         let t = (x ^ (x >> delta)) & mask;
         x ^ t ^ (t << delta)
     }
@@ -111,11 +101,11 @@ impl<const SQ: bool> UniqueSolutionStore<SQ> {
     }
     fn transpose(pieces: &[Bitboard; NUM_PIECES]) -> [Bitboard; NUM_PIECES] {
         array::from_fn(|i| {
-            let mut u = u64::from(pieces[i]);
+            let mut u = pieces[i];
             u = Transformer::delta_swap(u, &(0x00AA00AA00AA00AA, 7));
             u = Transformer::delta_swap(u, &(0x0000CCCC0000CCCC, 14));
             u = Transformer::delta_swap(u, &(0x00000000F0F0F0F0, 28));
-            u.into()
+            u
         })
     }
 }
@@ -148,9 +138,9 @@ type Table = [Vec<Vec<(usize, Bitboard)>>; 64];
 struct TableGenerator {
     rows: usize,
     cols: usize,
-    edges: [u64; 4],
+    edges: [Bitboard; 4],
     shapes: Vec<Vec<Vec<(usize, usize)>>>,
-    holes: Vec<(u64, u64)>,
+    holes: Vec<(Bitboard, Bitboard)>,
 }
 
 impl TableGenerator {
@@ -209,12 +199,12 @@ impl TableGenerator {
                             continue;
                         }
                         for (j, &b) in xs.iter().enumerate() {
-                            if (u & u64::from(b)) != 0 || self.check_hole(u | u64::from(b)) {
+                            if (u & b) != 0 || self.check_hole(u | b) {
                                 continue;
                             }
                             for k in 0..(1 << NUM_PIECES) {
                                 if (k & (1 << i)) == 0 {
-                                    tables[j][s[0].0 + offset][k].push((i, u.into()));
+                                    tables[j][s[0].0 + offset][k].push((i, u));
                                 }
                             }
                         }
@@ -236,19 +226,19 @@ impl TableGenerator {
                 let offset = x + y * self.cols;
                 if offset > 0 {
                     let u = v << offset;
-                    xs.push(u.into());
+                    xs.push(u);
                 }
             }
         }
         xs
     }
-    fn check_corner_space(&self, u: u64) -> bool {
+    fn check_corner_space(&self, u: Bitboard) -> bool {
         [0, 1, 2, 3, 0].windows(2).any(|w| {
             let (e0, e1) = (self.edges[w[0]], self.edges[w[1]]);
             (e0 & u) != 0 && (e1 & u) != 0 && (e0 & e1) & u == 0
         })
     }
-    fn check_hole(&self, u: u64) -> bool {
+    fn check_hole(&self, u: Bitboard) -> bool {
         self.holes.iter().any(|&(mask, hole)| (u & mask) == hole)
     }
 }
@@ -284,7 +274,7 @@ impl OptimizedSolver {
     ) -> Vec<[Bitboard; NUM_PIECES]> {
         let mut pieces = [Bitboard::default(); NUM_PIECES];
         for (x, table) in &self.tables {
-            if (initial & *x).is_empty() {
+            if initial & x == 0 {
                 pieces[X_INDEX] = *x;
                 Self::backtrack(initial | *x, 1 << X_INDEX, table, &mut pieces, &mut store);
             }
@@ -301,9 +291,9 @@ impl OptimizedSolver {
         if used == (1 << NUM_PIECES) - 1 {
             return store.add_solution(pieces);
         }
-        let target = u64::from(current).trailing_ones() as usize;
+        let target = current.trailing_ones() as usize;
         for &(i, b) in &table[target][used] {
-            if (current & b).is_empty() {
+            if current & b == 0 {
                 pieces[i] = b;
                 Self::backtrack(current | b, used | (1 << i), table, pieces, store);
             }
@@ -334,7 +324,7 @@ impl Solver for OptimizedSolver {
             let p = Piece::from_usize(i);
             for y in 0..self.rows {
                 for x in 0..self.cols {
-                    if !(*b & Bitboard::from(1 << (x + y * self.cols))).is_empty() {
+                    if b & (1 << (x + y * self.cols)) != 0 {
                         if self.transposed {
                             ret[x][y] = p;
                         } else {
