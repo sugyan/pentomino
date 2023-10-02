@@ -53,8 +53,8 @@ impl SolutionStore for AllSolutionStore {
     fn add_solution(&mut self, pieces: &[Bitboard; NUM_PIECES]) {
         self.solutions.push(*pieces);
     }
-    fn get_solutions(self) -> Vec<[Bitboard; NUM_PIECES]> {
-        self.solutions
+    fn get_solutions(&self) -> Vec<[Bitboard; NUM_PIECES]> {
+        self.solutions.clone()
     }
 }
 
@@ -89,8 +89,8 @@ impl<'a> SolutionStore for UniqueSolutionStore<'a> {
             self.set.insert(board.transpose());
         }
     }
-    fn get_solutions(self) -> Vec<[Bitboard; NUM_PIECES]> {
-        self.solutions
+    fn get_solutions(&self) -> Vec<[Bitboard; NUM_PIECES]> {
+        self.solutions.clone()
     }
 }
 

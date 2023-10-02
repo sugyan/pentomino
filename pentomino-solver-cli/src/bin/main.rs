@@ -1,5 +1,6 @@
 use clap::{Parser, ValueEnum};
 use colored::*;
+use pentomino_solver::solvers::OptimizedSolverType;
 use pentomino_solver::solvers::{DefaultSolver, OptimizedSolver, SimpleSolver};
 use pentomino_solver::Piece;
 use pentomino_solver::Solver as PentominoSolver;
@@ -40,7 +41,8 @@ enum Board {
 enum Solver {
     Simple,
     Default,
-    Optimized,
+    OptimizedSmall,
+    OptimizedLarge,
 }
 
 impl Solver {
@@ -48,7 +50,16 @@ impl Solver {
         match self {
             Solver::Simple => Box::new(SimpleSolver::new(rows, cols)),
             Solver::Default => Box::new(DefaultSolver::new(rows, cols)),
-            Solver::Optimized => Box::new(OptimizedSolver::new(rows, cols)),
+            Solver::OptimizedSmall => Box::new(OptimizedSolver::new(
+                rows,
+                cols,
+                OptimizedSolverType::SmallTable,
+            )),
+            Solver::OptimizedLarge => Box::new(OptimizedSolver::new(
+                rows,
+                cols,
+                OptimizedSolverType::LargeTable,
+            )),
         }
     }
 }
