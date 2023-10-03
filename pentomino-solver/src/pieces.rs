@@ -1,9 +1,9 @@
-use num_derive::{FromPrimitive, ToPrimitive};
+use num_derive::FromPrimitive;
 use std::fmt::Write;
 
 pub const NUM_PIECES: usize = 12;
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, FromPrimitive, ToPrimitive)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, FromPrimitive)]
 pub enum Piece {
     O = 0,
     P,
