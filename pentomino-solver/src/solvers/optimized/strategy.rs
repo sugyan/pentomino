@@ -3,6 +3,27 @@ use crate::solvers::SolutionStore;
 use crate::{Bitboard, NUM_PIECES};
 use std::array;
 
+type HoleChecks = [[(Bitboard, Bitboard); 2]; 64];
+
+trait Holes {
+    fn holes(rows: usize, cols: usize) -> HoleChecks {
+        let mut h = Vec::new();
+        for y in 0..rows {
+            for x in 0..cols {
+                let mut u = 0;
+                for (dx, dy) in [(0, !0), (0, 1), (!0, 0), (1, 0)] {
+                    let (x, y) = (x.wrapping_add(dx), y.wrapping_add(dy));
+                    if (0..cols).contains(&x) && (0..rows).contains(&y) {
+                        u |= 1 << (x + y * cols);
+                    }
+                }
+                h.push((u | (1 << (x + y * cols)), u));
+            }
+        }
+        array::from_fn(|i| [h[(i + 1) % h.len()], h[(i + cols - 1) % h.len()]])
+    }
+}
+
 pub(super) trait Strategy {
     fn new(rows: usize, cols: usize) -> Self
     where
@@ -18,7 +39,10 @@ pub(super) trait Strategy {
 
 pub(super) struct SmallTableStrategy {
     table: [[Vec<Bitboard>; NUM_PIECES]; 64],
+    holes: HoleChecks,
 }
+
+impl Holes for SmallTableStrategy {}
 
 impl Strategy for SmallTableStrategy {
     fn new(rows: usize, cols: usize) -> Self {
@@ -49,7 +73,10 @@ impl Strategy for SmallTableStrategy {
                 }
             }
         }
-        Self { table }
+        Self {
+            table,
+            holes: Self::holes(rows, cols),
+        }
     }
     fn backtrack(
         &self,
@@ -66,10 +93,15 @@ impl Strategy for SmallTableStrategy {
         let mut u = !used & ((1 << NUM_PIECES) - 1);
         while u != 0 {
             let i = u.trailing_zeros() as usize;
+            let used = used | (1 << i);
             for b in &self.table[target][i] {
                 if current & b == 0 {
+                    let next = current | b;
+                    if self.holes[target].iter().any(|&(u, v)| next & u == v) {
+                        continue;
+                    }
                     pieces[i] = *b;
-                    self.backtrack(current | b, used | (1 << i), pieces, store);
+                    self.backtrack(next, used, pieces, store);
                 }
             }
             u &= u - 1;
@@ -79,7 +111,10 @@ impl Strategy for SmallTableStrategy {
 
 pub(super) struct LargeTableStrategy {
     table: [Vec<Vec<(usize, Bitboard)>>; 64],
+    holes: HoleChecks,
 }
+
+impl Holes for LargeTableStrategy {}
 
 impl Strategy for LargeTableStrategy {
     fn new(rows: usize, cols: usize) -> Self {
@@ -114,7 +149,10 @@ impl Strategy for LargeTableStrategy {
                 }
             }
         }
-        Self { table }
+        Self {
+            table,
+            holes: Self::holes(rows, cols),
+        }
     }
     fn backtrack(
         &self,
@@ -129,8 +167,12 @@ impl Strategy for LargeTableStrategy {
         let target = current.trailing_ones() as usize;
         for &(i, b) in &self.table[target][used] {
             if current & b == 0 {
+                let next = current | b;
+                if self.holes[target].iter().any(|&(u, v)| next & u == v) {
+                    continue;
+                }
                 pieces[i] = b;
-                self.backtrack(current | b, used | (1 << i), pieces, store);
+                self.backtrack(next, used | (1 << i), pieces, store);
             }
         }
     }
