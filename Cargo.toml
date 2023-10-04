@@ -3,4 +3,5 @@ resolver = "2"
 members = [
     "pentomino-solver",
     "pentomino-solver-cli",
+    "pentomino-solver-wasm",
 ]
