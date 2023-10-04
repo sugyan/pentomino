@@ -1,5 +1,6 @@
 use clap::{Parser, ValueEnum};
 use colored::*;
+use pentomino_solver::solvers::OptimizedSolverType;
 use pentomino_solver::solvers::{DefaultSolver, OptimizedSolver, SimpleSolver};
 use pentomino_solver::Piece;
 use pentomino_solver::Solver as PentominoSolver;
@@ -40,7 +41,8 @@ enum Board {
 enum Solver {
     Simple,
     Default,
-    Optimized,
+    OptimizedSmall,
+    OptimizedLarge,
 }
 
 impl Solver {
@@ -48,7 +50,16 @@ impl Solver {
         match self {
             Solver::Simple => Box::new(SimpleSolver::new(rows, cols)),
             Solver::Default => Box::new(DefaultSolver::new(rows, cols)),
-            Solver::Optimized => Box::new(OptimizedSolver::new(rows, cols)),
+            Solver::OptimizedSmall => Box::new(OptimizedSolver::new(
+                rows,
+                cols,
+                OptimizedSolverType::SmallTable,
+            )),
+            Solver::OptimizedLarge => Box::new(OptimizedSolver::new(
+                rows,
+                cols,
+                OptimizedSolverType::LargeTable,
+            )),
         }
     }
 }
@@ -87,13 +98,13 @@ fn main() {
     let args = Args::parse();
 
     let ((rows, cols), initial) = match args.board {
-        Board::Rect3x20 => ((3, 20), 0.into()),
-        Board::Rect4x15 => ((4, 15), 0.into()),
-        Board::Rect5x12 => ((5, 12), 0.into()),
-        Board::Rect6x10 => ((6, 10), 0.into()),
+        Board::Rect3x20 => ((3, 20), 0),
+        Board::Rect4x15 => ((4, 15), 0),
+        Board::Rect5x12 => ((5, 12), 0),
+        Board::Rect6x10 => ((6, 10), 0),
         Board::Rect8x8_2x2 => (
             (8, 8),
-            [27, 28, 35, 36].iter().map(|&p| 1 << p).sum::<u64>().into(),
+            [27, 28, 35, 36].iter().map(|&p| 1 << p).sum::<u64>(),
         ),
     };
     let solver = args.solver.create_solver(rows, cols);
