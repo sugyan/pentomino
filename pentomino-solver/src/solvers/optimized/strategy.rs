@@ -3,25 +3,23 @@ use crate::solvers::SolutionStore;
 use crate::{Bitboard, NUM_PIECES};
 use std::array;
 
-type HoleChecks = [[(Bitboard, Bitboard); 2]; 64];
+type HoleCheckers = [[(Bitboard, Bitboard); 2]; 64];
 
-trait Holes {
-    fn holes(rows: usize, cols: usize) -> HoleChecks {
-        let mut h = Vec::new();
-        for y in 0..rows {
-            for x in 0..cols {
-                let mut u = 0;
-                for (dx, dy) in [(0, !0), (0, 1), (!0, 0), (1, 0)] {
-                    let (x, y) = (x.wrapping_add(dx), y.wrapping_add(dy));
-                    if (0..cols).contains(&x) && (0..rows).contains(&y) {
-                        u |= 1 << (x + y * cols);
-                    }
+fn hole_checkers(rows: usize, cols: usize) -> HoleCheckers {
+    let mut h = Vec::new();
+    for y in 0..rows {
+        for x in 0..cols {
+            let mut u = 0;
+            for (dx, dy) in [(0, !0), (0, 1), (!0, 0), (1, 0)] {
+                let (x, y) = (x.wrapping_add(dx), y.wrapping_add(dy));
+                if (0..cols).contains(&x) && (0..rows).contains(&y) {
+                    u |= 1 << (x + y * cols);
                 }
-                h.push((u | (1 << (x + y * cols)), u));
             }
+            h.push((u | (1 << (x + y * cols)), u));
         }
-        array::from_fn(|i| [h[(i + 1) % h.len()], h[(i + cols - 1) % h.len()]])
     }
+    array::from_fn(|i| [h[(i + 1) % h.len()], h[(i + cols - 1) % h.len()]])
 }
 
 pub(super) trait Strategy {
@@ -39,10 +37,8 @@ pub(super) trait Strategy {
 
 pub(super) struct SmallTableStrategy {
     table: [[Vec<Bitboard>; NUM_PIECES]; 64],
-    holes: HoleChecks,
+    holes: HoleCheckers,
 }
-
-impl Holes for SmallTableStrategy {}
 
 impl Strategy for SmallTableStrategy {
     fn new(rows: usize, cols: usize) -> Self {
@@ -75,7 +71,7 @@ impl Strategy for SmallTableStrategy {
         }
         Self {
             table,
-            holes: Self::holes(rows, cols),
+            holes: hole_checkers(rows, cols),
         }
     }
     fn backtrack(
@@ -111,10 +107,8 @@ impl Strategy for SmallTableStrategy {
 
 pub(super) struct LargeTableStrategy {
     table: [Vec<Vec<(usize, Bitboard)>>; 64],
-    holes: HoleChecks,
+    holes: HoleCheckers,
 }
-
-impl Holes for LargeTableStrategy {}
 
 impl Strategy for LargeTableStrategy {
     fn new(rows: usize, cols: usize) -> Self {
@@ -151,7 +145,7 @@ impl Strategy for LargeTableStrategy {
         }
         Self {
             table,
-            holes: Self::holes(rows, cols),
+            holes: hole_checkers(rows, cols),
         }
     }
     fn backtrack(

@@ -10,6 +10,7 @@ crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 pentomino-solver = { path = "../pentomino-solver" }
+js-sys = "0.3.64"
 wasm-bindgen = "0.2.87"
 
 [dev-dependencies]

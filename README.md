@@ -1,6 +1,6 @@
 # pentomino
 
-Solver library and CLI application for [Pentomino](https://en.wikipedia.org/wiki/Pentomino) puzzle.
+Solver library and applications for [Pentomino](https://en.wikipedia.org/wiki/Pentomino) puzzle.
 
 ## Contents
 
