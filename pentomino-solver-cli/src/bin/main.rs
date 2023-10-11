@@ -7,7 +7,7 @@ use pentomino_solver::Solver as PentominoSolver;
 use std::time::Instant;
 use supports_color::Stream;
 
-/// Pentomino solver
+/// Pentomino solver CLI application
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
 struct Args {
