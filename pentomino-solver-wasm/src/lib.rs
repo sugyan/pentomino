@@ -13,9 +13,14 @@ pub struct WasmSolver {
 
 #[wasm_bindgen]
 impl WasmSolver {
-    pub fn new(rows: usize, cols: usize) -> Self {
+    pub fn new(rows: usize, cols: usize, large_table: bool) -> Self {
+        let solver_type = if large_table {
+            OptimizedSolverType::LargeTable
+        } else {
+            OptimizedSolverType::SmallTable
+        };
         Self {
-            inner: OptimizedSolver::new(rows, cols, OptimizedSolverType::LargeTable),
+            inner: OptimizedSolver::new(rows, cols, solver_type),
         }
     }
     pub fn solve(&self, initial: Bitboard, unique: bool) -> Solutions {
