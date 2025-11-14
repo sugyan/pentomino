@@ -4,6 +4,6 @@ Solver library and applications for [Pentomino](https://en.wikipedia.org/wiki/Pe
 
 ## Contents
 
-- [pentomino-solver](./pentomino-sovler): Solver library
+- [pentomino-solver](./pentomino-solver): Solver library
 - [pentomino-solver-cli](./pentomino-solver-cli): CLI application
 - [pentomino-solver-wasm](./pentomino-solver-wasm): for WebAssembly
