@@ -1,4 +1,4 @@
-use clap::{Parser, ValueEnum};
+use clap::{CommandFactory, Parser, ValueEnum};
 use colored::*;
 use pentomino_solver::solvers::OptimizedSolverType;
 use pentomino_solver::solvers::{DefaultSolver, OptimizedSolver, SimpleSolver};
@@ -96,6 +96,15 @@ fn output(piece: &Option<Piece>, color: bool) -> String {
 
 fn main() {
     let args = Args::parse();
+
+    if args.unique && matches!(args.solver, Solver::Simple) {
+        Args::command()
+            .error(
+                clap::error::ErrorKind::ArgumentConflict,
+                "--unique is not supported by --solver simple",
+            )
+            .exit();
+    }
 
     let ((rows, cols), initial) = match args.board {
         Board::Rect3x20 => ((3, 20), 0),
